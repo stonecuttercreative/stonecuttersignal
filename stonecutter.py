@@ -374,40 +374,113 @@ class StonecutterSignal:
         logger.info(f"Built unified context with {len(unified_text)} characters")
         return unified_text
     
-    def evaluate_signal(self, unified_context: Dict[str, Any]) -> Dict[str, Any]:
+    def evaluate_signal(self, unified_context: str) -> Dict[str, Any]:
         """
         Evaluate the unified context and produce Signal scores in JSON format.
         
         Args:
-            unified_context: The unified context data
+            unified_context: The unified context string
             
         Returns:
             Dictionary with Signal scores and metrics
         """
-        # TODO: Implement signal evaluation logic
-        # - Use OpenAI to analyze unified context
-        # - Generate quantitative Signal scores
-        # - Validate and structure JSON output
         logger.info("Evaluating Signal scores from unified context")
-        pass
+        
+        try:
+            prompt = f"""You are a creative effectiveness analyst.
+Using only the following context:
+
+---CONTEXT START---
+{unified_context}
+---CONTEXT END---
+
+Evaluate the campaign against the Stonecutter Signal Index.
+Return a JSON object with:
+{{
+  "scores": {{
+      "cultural_fit": (0–100),
+      "clarity": (0–100),
+      "emotional_resonance": (0–100),
+      "differentiation": (0–100),
+      "platform_fit": (0–100),
+      "memorability": (0–100)
+  }},
+  "reasoning": "short explanation of why this overall score was given"
+}}"""
+            
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            logger.info("Successfully evaluated Signal scores")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to evaluate signal: {str(e)}")
+            # Fallback scores
+            return {
+                "scores": {
+                    "cultural_fit": 50,
+                    "clarity": 50,
+                    "emotional_resonance": 50,
+                    "differentiation": 50,
+                    "platform_fit": 50,
+                    "memorability": 50
+                },
+                "reasoning": "Unable to evaluate due to error. Default scores provided."
+            }
     
-    def synthesize_story(self, scores: Dict[str, Any], context: Dict[str, Any]) -> str:
+    def synthesize_story(self, scores: Dict[str, Any], context: str) -> str:
         """
         Generate executive summary "Signal Story" from scores and context.
         
         Args:
             scores: Signal scores and metrics
-            context: Unified context data
+            context: Unified context string
             
         Returns:
             Executive summary string
         """
-        # TODO: Implement story synthesis logic
-        # - Use OpenAI to create narrative summary
-        # - Integrate key insights and scores
-        # - Generate executive-level communication
         logger.info("Synthesizing Signal Story")
-        pass
+        
+        try:
+            # Format scores for inclusion in prompt
+            scores_text = json.dumps(scores, indent=2)
+            
+            prompt = f"""You are a narrative strategist.
+Write a short, clear executive summary (no more than 200 words) of the campaign's relevance and cultural momentum based on the following scores and supporting context. Use a matter-of-fact tone (professional but real).
+
+SCORES:
+{scores_text}
+
+CONTEXT:
+{context}"""
+            
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            )
+            
+            story = response.choices[0].message.content.strip()
+            logger.info("Successfully synthesized Signal Story")
+            return story
+            
+        except Exception as e:
+            logger.error(f"Failed to synthesize story: {str(e)}")
+            return "Unable to generate executive summary due to processing error. Please review the scores and context manually."
     
     def validate_and_reformat_json(self, json_data: str) -> Dict[str, Any]:
         """
@@ -507,12 +580,17 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
         unified_context = engine.build_unified_context(internal_context_str, external_evidence)
         
         # Step 8: Evaluate and score the signal
-        # TODO: Generate comprehensive scoring metrics
         signal_scores = engine.evaluate_signal(unified_context)
         
         # Step 9: Synthesize executive summary
-        # TODO: Create compelling narrative summary
         signal_story = engine.synthesize_story(signal_scores, unified_context)
+        
+        # Print results for immediate review
+        print("\n=== SIGNAL SCORES ===")
+        print(json.dumps(signal_scores, indent=2))
+        print("\n=== SIGNAL STORY ===")
+        print(signal_story)
+        print("\n=== END ANALYSIS ===")
         
         # Step 10: Validate final output
         # TODO: Ensure JSON compliance and completeness
