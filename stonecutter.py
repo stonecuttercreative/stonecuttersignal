@@ -620,70 +620,15 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    print("Welcome to Stonecutter Signal — cultural diagnostic engine")
-
-    brand_cache = None  # session-level brand storage
-
-    while True:
-        # STEP 1 — get or reuse brand brief
-        if not brand_cache:
-            raw_brief = input("\nPaste your campaign brief (Brand + Industry + Concept). Type 'exit' to quit:\n")
-            if raw_brief.strip().lower() in ["exit", "quit"]:
-                print("Goodbye.")
-                break
-
-            # clarification
-            engine = StonecutterSignal()
-            clarification = engine.brand_clarification_prompt(raw_brief)
-            if clarification.get("clarification_needed", False):
-                followup = input(f"Clarification needed: {clarification['message']}\n> ")
-                raw_brief = raw_brief + "\n" + followup
-
-            # concept separation
-            separated = engine.separate_concepts(raw_brief)
-            if len(separated) > 1:
-                print(f"\nMultiple concepts detected ({len(separated)}). Please choose one:")
-                for idx, concept in enumerate(separated):
-                    print(f"{idx+1}. {concept}")
-                selection = int(input("Enter number:\n")) - 1
-                selected_concept = separated[selection]
-            else:
-                selected_concept = separated[0]
-
-            # store brand and selected concept for reuse
-            brand_cache = {
-                "brand_brief": raw_brief,
-                "concept": selected_concept
-            }
-        else:
-            # reuse existing brand and allow switching concept
-            reuse = input("\nUse the same brand brief for another concept? (y/n): ")
-            if reuse.strip().lower() == "y":
-                concept_text = input("Paste the new concept only:\n")
-                brand_cache["concept"] = concept_text
-            else:
-                brand_cache = None
-                continue
-
-        # STEP 2 — credential health check
-        print("⚙️  Checking external credentials...")
-        if not os.getenv("REDDIT_CLIENT_ID"):
-            print("  ⚠️  Reddit API key missing — Reddit evidence will be skipped")
-        if not os.getenv("TWITTER_BEARER_TOKEN"):
-            print("  ⚠️  Twitter API key missing — Twitter sentiment will be skipped")
-        if not os.getenv("META_ACCESS_TOKEN"):
-            print("  ⚠️  Meta API key missing — Meta Ad Library will be skipped")
-
-        # STEP 3 — run the signal engine
-        final_brief = brand_cache["brand_brief"] + "\n\nConcept: " + brand_cache["concept"]
-        result = run_signal_engine(final_brief)
-
-        print("\n— SIGNAL SCORE —")
-        print(result.get("signal_scores", {}).get("scores", {}))
-        print("\n— SIGNAL SUMMARY —")
-        print(result.get("signal_story", "No summary available"))
-
-        again = input("\nRun another analysis? (y/n): ")
-        if again.strip().lower() != "y":
-            print("Goodbye.")
-            break
+    # Test run with Patagonia brief
+    patagonia_brief = """Brand: Patagonia
+Industry: Outdoor apparel
+Concept: Patagonia is launching a new awareness campaign around climate responsibility called "We Don't Own the Earth, We Borrow It". The creative idea uses real footage of melting glaciers and asks the audience to reflect on their personal accountability in protecting the planet. The company positions itself as a radically honest brand that puts long-term sustainability above quarterly profit."""
+    
+    print("=== STONECUTTER SIGNAL ANALYSIS ===")
+    print("Running analysis for Patagonia campaign...")
+    
+    result = run_signal_engine(patagonia_brief)
+    
+    print("\n=== COMPLETE ANALYSIS RESULTS ===")
+    print(json.dumps(result, indent=2))
