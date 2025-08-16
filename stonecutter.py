@@ -620,7 +620,11 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    # Example usage - remove in production
-    sample_brief = "Brand: TechCorp, Industry: Software, Concept: AI-powered productivity suite"
-    results = run_signal_engine(sample_brief)
-    print(json.dumps(results, indent=2))
+    example_brief = (
+        "Brand: Nike\n"
+        "Industry: Athletic apparel\n"
+        "Campaign Title: Dream Crazy\n"
+        "Concept: Inspirational campaign with Colin Kaepernick encouraging people to dream boldly."
+    )
+    result = run_signal_engine(example_brief)
+    print(result)
