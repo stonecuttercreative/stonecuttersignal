@@ -242,7 +242,7 @@ class StonecutterSignal:
         logger.info("Gathering internal context and analogies")
         pass
     
-    def resilient_external_call(self, source: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
+    def resilient_external_call(self, source: str, query_text: str = "") -> Dict[str, Any]:
         """
         Make external API call with resilience loop:
         1. Retry once on failure
@@ -251,53 +251,128 @@ class StonecutterSignal:
         
         Args:
             source: External API source identifier
-            params: Parameters for the API call
+            query_text: Query text for the API call
             
         Returns:
             Dictionary with call results or error information
         """
-        # TODO: Implement resilient external call logic
-        # - Attempt initial API call
-        # - Implement retry mechanism with delay
-        # - Use OpenAI to diagnose failures
-        # - Structure response for human intervention if needed
         logger.info(f"Making resilient external call to: {source}")
+        
+        def make_external_call(source_name: str, query: str):
+            """Make the actual external API call based on source type."""
+            if source_name == "reddit":
+                return self.fetch_reddit_posts(query)
+            elif source_name == "twitter":
+                return self.fetch_twitter_sentiment(query)
+            elif source_name == "google_trends":
+                return self.fetch_google_trends(query)
+            else:
+                raise ValueError(f"Unsupported source: {source_name}")
+        
+        last_error = None
         
         for attempt in range(self.max_retries + 1):
             try:
-                # TODO: Implement actual external API call
-                # Based on source parameter, call appropriate external API
-                # Handle authentication, parameters, and response processing
-                pass
+                result = make_external_call(source, query_text)
+                logger.info(f"Successfully retrieved data from {source}")
+                return result
+                
             except Exception as e:
-                logger.warning(f"External call attempt {attempt + 1} failed: {str(e)}")
+                last_error = str(e)
+                logger.warning(f"External call attempt {attempt + 1} failed: {last_error}")
                 if attempt < self.max_retries:
                     time.sleep(self.retry_delay)
                     continue
                 else:
-                    # TODO: Use OpenAI to diagnose the failure
-                    # Generate human-readable error explanation
-                    # Return structured error response
-                    pass
-        pass
+                    # Use OpenAI to suggest fallback
+                    try:
+                        response = openai_client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=[
+                                {
+                                    "role": "user",
+                                    "content": f"The following external data source returned an error: {last_error}. Suggest a fallback or next-best source for this campaign analysis."
+                                }
+                            ]
+                        )
+                        
+                        fallback_suggestion = response.choices[0].message.content.strip()
+                        logger.info(f"OpenAI suggested fallback: {fallback_suggestion}")
+                        
+                        return {
+                            'source': source,
+                            'status': 'failed',
+                            'error': last_error,
+                            'fallback_suggestion': fallback_suggestion
+                        }
+                        
+                    except Exception as openai_error:
+                        logger.error(f"Failed to get OpenAI fallback suggestion: {str(openai_error)}")
+                        return {
+                            'source': source,
+                            'status': 'failed', 
+                            'error': last_error,
+                            'fallback_suggestion': 'Consider using alternative data sources or manual research'
+                        }
     
-    def build_unified_context(self, internal: Dict[str, Any], external: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def fetch_reddit_posts(self, query: str) -> Dict[str, Any]:
+        """Placeholder for Reddit API integration."""
+        # TODO: Implement actual Reddit API call
+        raise NotImplementedError("Reddit API integration not yet implemented")
+    
+    def fetch_twitter_sentiment(self, query: str) -> Dict[str, Any]:
+        """Placeholder for Twitter API integration."""
+        # TODO: Implement actual Twitter API call
+        raise NotImplementedError("Twitter API integration not yet implemented")
+    
+    def fetch_google_trends(self, query: str) -> Dict[str, Any]:
+        """Placeholder for Google Trends API integration."""
+        # TODO: Implement actual Google Trends API call
+        raise NotImplementedError("Google Trends API integration not yet implemented")
+    
+    def build_unified_context(self, internal_context: str, external_results: List[Dict[str, Any]]) -> str:
         """
         Combine internal and external evidence into unified context.
         
         Args:
-            internal: Internal context data
-            external: List of external evidence data
+            internal_context: Internal context string
+            external_results: List of external evidence data
             
         Returns:
-            Unified context dictionary
+            Unified context string
         """
-        # TODO: Implement context unification logic
-        # - Merge internal and external data sources
-        # - Resolve conflicts and inconsistencies using OpenAI
-        # - Create structured unified context
         logger.info("Building unified context from internal and external sources")
-        pass
+        
+        # Start with internal context
+        unified_text = f"INTERNAL CONTEXT:\n{internal_context or 'No internal context available'}\n\n"
+        
+        # Add external evidence
+        unified_text += "EXTERNAL EVIDENCE:\n"
+        
+        if not external_results:
+            unified_text += "No external evidence available\n"
+        else:
+            for i, result in enumerate(external_results, 1):
+                if result:
+                    source = result.get('source', f'Source {i}')
+                    status = result.get('status', 'unknown')
+                    
+                    if status == 'failed':
+                        unified_text += f"{i}. {source.upper()}: Failed to retrieve data\n"
+                        if 'fallback_suggestion' in result:
+                            unified_text += f"   Fallback suggestion: {result['fallback_suggestion']}\n"
+                    else:
+                        # For successful results, format the data
+                        unified_text += f"{i}. {source.upper()}: "
+                        if 'data' in result:
+                            unified_text += f"{str(result['data'])}\n"
+                        else:
+                            unified_text += f"{str(result)}\n"
+                    
+                    unified_text += "\n"
+        
+        logger.info(f"Built unified context with {len(unified_text)} characters")
+        return unified_text
     
     def evaluate_signal(self, unified_context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -420,14 +495,16 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
         external_evidence = []
         for source in sources:
             try:
-                evidence = engine.resilient_external_call(source)
+                evidence = engine.resilient_external_call(source, current_concept)
                 external_evidence.append(evidence)
             except Exception as e:
                 logger.error(f"Failed to gather evidence from {source}: {str(e)}")
         
         # Step 7: Build unified context
         # TODO: Merge internal and external data effectively
-        unified_context = engine.build_unified_context(internal_context, external_evidence)
+        # Convert internal_context to string if it's not already
+        internal_context_str = str(internal_context) if internal_context else "No internal context available"
+        unified_context = engine.build_unified_context(internal_context_str, external_evidence)
         
         # Step 8: Evaluate and score the signal
         # TODO: Generate comprehensive scoring metrics
