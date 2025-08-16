@@ -620,14 +620,14 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    # Test run with Nike brief
-    sample_brief = """Brand: Nike
-Industry: Athletic apparel
-Campaign Title: Dream Crazy (Colin Kaepernick)
-Concept: An inspirational campaign featuring Colin Kaepernick that encourages people to stand for their beliefs even when it's controversial. The message is "dream crazy" and positions Nike as a culturally aware and courageous brand that supports social justice."""
+    # Test run with Dove Real Beauty brief
+    sample_brief = """Brand: Dove
+Industry: Beauty / Personal Care
+Campaign Title: Real Beauty (2004 Launch)
+Concept: The original Real Beauty campaign launched in 2004 featuring real women instead of models in order to challenge conventional beauty standards. The message encouraged self-confidence and authenticity, positioning Dove as a socially responsible brand advocating for inclusive beauty."""
     
     print("=== STONECUTTER SIGNAL ANALYSIS ===")
-    print("Running analysis for Nike campaign...")
+    print("Running analysis for Dove Real Beauty campaign...")
     
     result = run_signal_engine(sample_brief)
     
