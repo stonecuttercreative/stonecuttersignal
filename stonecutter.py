@@ -620,15 +620,16 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    # Test run with Patagonia brief
-    patagonia_brief = """Brand: Patagonia
-Industry: Outdoor apparel
-Concept: Patagonia is launching a new awareness campaign around climate responsibility called "We Don't Own the Earth, We Borrow It". The creative idea uses real footage of melting glaciers and asks the audience to reflect on their personal accountability in protecting the planet. The company positions itself as a radically honest brand that puts long-term sustainability above quarterly profit."""
+    # Test run with Nike brief
+    sample_brief = """Brand: Nike
+Industry: Athletic apparel
+Campaign Title: Dream Crazy (Colin Kaepernick)
+Concept: An inspirational campaign featuring Colin Kaepernick that encourages people to stand for their beliefs even when it's controversial. The message is "dream crazy" and positions Nike as a culturally aware and courageous brand that supports social justice."""
     
     print("=== STONECUTTER SIGNAL ANALYSIS ===")
-    print("Running analysis for Patagonia campaign...")
+    print("Running analysis for Nike campaign...")
     
-    result = run_signal_engine(patagonia_brief)
+    result = run_signal_engine(sample_brief)
     
     print("\n=== COMPLETE ANALYSIS RESULTS ===")
     print(json.dumps(result, indent=2))
