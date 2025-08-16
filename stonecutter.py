@@ -41,12 +41,38 @@ class StonecutterSignal:
         Returns:
             List of separated concept strings
         """
-        # TODO: Implement concept separation logic
-        # - Use OpenAI to analyze brief for multiple concepts
-        # - Split into individual concepts if multiple detected
-        # - Return list of concept strings
         logger.info("Separating concepts from brief")
-        pass
+        
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"You are a campaign analysis assistant. Does the following brief contain more than one distinctly different campaign concept? If yes, output a JSON list of the split concepts. If no, output a JSON list with a single element.\n\nBrief: {brief}"
+                    }
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            
+            # Handle different possible JSON structures
+            if isinstance(result, list):
+                concepts = result
+            elif isinstance(result, dict) and 'concepts' in result:
+                concepts = result['concepts']
+            else:
+                # Fallback: assume single concept
+                concepts = [brief]
+            
+            logger.info(f"Separated {len(concepts)} concept(s)")
+            return concepts
+            
+        except Exception as e:
+            logger.error(f"Failed to separate concepts: {str(e)}")
+            # Fallback to original brief as single concept
+            return [brief]
     
     def brand_clarification_prompt(self, brief: str) -> Dict[str, Any]:
         """
@@ -59,12 +85,41 @@ class StonecutterSignal:
         Returns:
             Dictionary with clarification status and questions if needed
         """
-        # TODO: Implement brand clarification logic
-        # - Analyze brief for brand context completeness
-        # - Generate specific clarification questions via OpenAI
-        # - Return structured response with status and questions
         logger.info("Checking brand context clarity")
-        pass
+        
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"You are a senior brand strategist. Please assess whether the following campaign brief includes sufficient understanding of the brand (values, audience, positioning). If not, ask one clarification question. If yes, return 'OK'.\n\nBrief: {brief}"
+                    }
+                ]
+            )
+            
+            result = response.choices[0].message.content.strip()
+            
+            if result.upper() == 'OK':
+                return {
+                    'status': 'sufficient',
+                    'message': 'Brand context is sufficient',
+                    'clarification_needed': False
+                }
+            else:
+                return {
+                    'status': 'needs_clarification',
+                    'message': result,
+                    'clarification_needed': True
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to assess brand clarity: {str(e)}")
+            return {
+                'status': 'error',
+                'message': f'Error assessing brand context: {str(e)}',
+                'clarification_needed': False
+            }
     
     def classify_concept_and_archetype(self, brief: str) -> Dict[str, str]:
         """
