@@ -131,12 +131,37 @@ class StonecutterSignal:
         Returns:
             Dictionary with cluster and archetype classifications
         """
-        # TODO: Implement classification logic
-        # - Use OpenAI to classify concept into predefined clusters
-        # - Determine cultural archetype alignment
-        # - Return structured classification data
         logger.info("Classifying concept and archetype")
-        pass
+        
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"You are a cultural strategist. Classify the following campaign concept into (1) concept cluster (e.g. 'product benefit', 'purpose-led', 'social commentary', 'innovation showcase', etc.), and (2) cultural archetype (e.g. 'challenger', 'humanist', 'magician', 'sage', etc.). Output as JSON:\n{{\n  \"cluster\": \"<cluster>\",\n  \"archetype\": \"<archetype>\"\n}}\n\nConcept: {brief}"
+                    }
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            
+            classification = {
+                'cluster': result.get('cluster', 'unknown'),
+                'archetype': result.get('archetype', 'unknown')
+            }
+            
+            logger.info(f"Classified as cluster: {classification['cluster']}, archetype: {classification['archetype']}")
+            return classification
+            
+        except Exception as e:
+            logger.error(f"Failed to classify concept and archetype: {str(e)}")
+            # Fallback classification
+            return {
+                'cluster': 'unknown',
+                'archetype': 'unknown'
+            }
     
     def select_sources(self, cluster: str, archetype: str) -> List[str]:
         """
@@ -149,12 +174,56 @@ class StonecutterSignal:
         Returns:
             List of top 3 evidence source identifiers
         """
-        # TODO: Implement source selection logic
-        # - Map cluster/archetype to relevant evidence sources
-        # - Rank sources by relevance using OpenAI
-        # - Return top 3 source identifiers
         logger.info(f"Selecting evidence sources for cluster: {cluster}, archetype: {archetype}")
-        pass
+        
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"You are an insight strategist. Given the cluster = {cluster} and archetype = {archetype}, list the three best evidence sources (e.g. \"reddit\", \"twitter\", \"tiktok\", \"google_trends\", \"meta_ad_library\", \"news\"). Return them as a JSON list of strings, e.g. [\"reddit\",\"twitter\",\"google_trends\"]. Do not include explanations or extra text."
+                    }
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            
+            # Handle different possible JSON structures
+            if isinstance(result, list):
+                sources = result
+            elif isinstance(result, dict) and 'sources' in result:
+                sources = result['sources']
+            elif isinstance(result, dict):
+                # Try to find a list in any key
+                for key, value in result.items():
+                    if isinstance(value, list):
+                        sources = value
+                        break
+                else:
+                    sources = ['reddit', 'twitter', 'google_trends']  # fallback
+            else:
+                sources = ['reddit', 'twitter', 'google_trends']  # fallback
+            
+            # Ensure we have exactly 3 sources
+            sources = sources[:3]  # Take first 3
+            while len(sources) < 3:
+                fallback_sources = ['reddit', 'twitter', 'google_trends', 'news', 'tiktok']
+                for fallback in fallback_sources:
+                    if fallback not in sources:
+                        sources.append(fallback)
+                        break
+                if len(sources) >= 3:
+                    break
+            
+            logger.info(f"Selected evidence sources: {sources}")
+            return sources
+            
+        except Exception as e:
+            logger.error(f"Failed to select sources: {str(e)}")
+            # Fallback sources
+            return ['reddit', 'twitter', 'google_trends']
     
     def get_internal_context(self, brief: str) -> Dict[str, Any]:
         """
