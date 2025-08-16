@@ -1,0 +1,51 @@
+You are helping me build an AI-powered diagnostic analysis engine called Stonecutter Signal.
+
+Stonecutter Signal should:
+– Accept a campaign brief (brand, industry, concept)
+– Detect multiple concepts and split them if needed
+– Clarify brand/context if insufficient
+– Classify the concept (cluster + cultural archetype)
+– Select the top 3 most relevant evidence sources
+– Gather historical + real-time evidence (external APIs)
+– Use internal LLM context for historical analogies
+– Combine the evidence and produce a Signal score (JSON)
+– Generate a short executive summary (“Signal Story”)
+– Contain a resilience loop for all external calls (retry once, then LLM diagnosis, then ask for human action)
+– Validate JSON and reformat via the LLM if malformed
+
+IMPORTANT:
+All of the reasoning (classification, clarification, planning, scoring) uses OpenAI GPT **via API calls**, but the **logic and orchestration happen inside our Python code** (this is our proprietary layer). Please keep that in mind when scaffolding.
+
+**Do NOT** implement the full logic yet.  
+For now, ONLY scaffold the file called `stonecutter.py` with function stubs and placeholder sections based on this structure:
+
+---
+File: stonecutter.py
+
+# NOTE: This script orchestrates the flow. 
+# OpenAI API is used only for reasoning and analysis within each step.
+
+- separate_concepts(brief)
+- brand_clarification_prompt(brief)
+- classify_concept_and_archetype(brief)
+- select_sources(cluster, archetype)
+- get_internal_context(brief)
+- resilient_external_call(source)
+- build_unified_context(internal, external)
+- evaluate_signal(unified_context)
+- synthesize_story(scores, context)
+
+# --- Future hooks (leave as pass) ---
+- run_owned_data_ingest(...)
+- run_multi_concept_scenario_analysis(...)
+- run_cultural_archetype_reframe(...)
+
+def run_signal_engine(brief):
+    # main execution flow calling all functions in sequence
+    # include TODO comments where logic will be inserted
+
+---
+
+✅ Please scaffold the file and **pause**.  
+Do not attempt to implement the inner logic yet. 
+Wait for further instructions after scaffold is complete.
