@@ -30,6 +30,75 @@ class StonecutterSignal:
         self.max_retries = 1
         self.retry_delay = 2
     
+    def parse_brief_fields(self, brief: str) -> Dict[str, str]:
+        """
+        Parse campaign brief to extract structured fields including optional Audience and Channels.
+        
+        Args:
+            brief: The campaign brief string
+            
+        Returns:
+            Dictionary with parsed fields (brand, category, concept, mode, audience, channels)
+        """
+        logger.info("Parsing brief fields")
+        
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"""You are a campaign brief parser. Extract the following fields from this brief:
+- Brand (required)
+- Category/Industry (required) 
+- Concept (required)
+- Mode (required)
+- Audience (optional - target demographic/psychographic description)
+- Channels (optional - distribution channels, comma-separated)
+
+Return JSON format:
+{{
+  "brand": "<brand>",
+  "category": "<category>", 
+  "concept": "<concept>",
+  "mode": "<mode>",
+  "audience": "<audience or null>",
+  "channels": "<channels or null>"
+}}
+
+Brief: {brief}"""
+                    }
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            
+            # Ensure all required fields exist with defaults
+            parsed_fields = {
+                'brand': result.get('brand', 'Unknown'),
+                'category': result.get('category', 'Unknown'),
+                'concept': result.get('concept', brief),  # fallback to full brief
+                'mode': result.get('mode', 'Unknown'),
+                'audience': result.get('audience'),  # Can be None
+                'channels': result.get('channels')   # Can be None
+            }
+            
+            logger.info(f"Parsed brief fields - Audience: {'present' if parsed_fields['audience'] else 'not provided'}, Channels: {'present' if parsed_fields['channels'] else 'not provided'}")
+            return parsed_fields
+            
+        except Exception as e:
+            logger.error(f"Failed to parse brief fields: {str(e)}")
+            # Fallback: return brief as concept with other fields unknown
+            return {
+                'brand': 'Unknown',
+                'category': 'Unknown', 
+                'concept': brief,
+                'mode': 'Unknown',
+                'audience': None,
+                'channels': None
+            }
+    
     def separate_concepts(self, brief: str) -> List[str]:
         """
         Analyze campaign brief and detect if multiple concepts exist.
@@ -225,22 +294,35 @@ class StonecutterSignal:
             # Fallback sources
             return ['reddit', 'twitter', 'google_trends']
     
-    def get_internal_context(self, brief: str) -> Dict[str, Any]:
+    def get_internal_context(self, brief: str, audience: Optional[str] = None) -> Dict[str, Any]:
         """
         Gather internal LLM context for historical analogies and patterns.
         
         Args:
             brief: The campaign brief string
+            audience: Optional audience information to include in context
             
         Returns:
             Dictionary with internal context data
         """
+        logger.info("Gathering internal context and analogies")
+        
+        # Build context string including audience if provided
+        context_parts = [f"Campaign Brief: {brief}"]
+        
+        if audience:
+            context_parts.append(f"Target Audience: {audience}")
+            logger.info("Including audience information in internal context")
+        
         # TODO: Implement internal context gathering
         # - Use OpenAI to find historical analogies
         # - Identify relevant patterns from internal knowledge
         # - Structure context data for analysis
-        logger.info("Gathering internal context and analogies")
-        pass
+        
+        return {
+            'context_text': '\n'.join(context_parts),
+            'audience_included': bool(audience)
+        }
     
     def resilient_external_call(self, source: str, query_text: str = "") -> Dict[str, Any]:
         """
@@ -330,7 +412,7 @@ class StonecutterSignal:
         # TODO: Implement actual Google Trends API call
         raise NotImplementedError("Google Trends API integration not yet implemented")
     
-    def build_unified_context(self, internal_context: str, external_results: List[Dict[str, Any]]) -> str:
+    def build_unified_context(self, internal_context: Dict[str, Any], external_results: List[Dict[str, Any]]) -> str:
         """
         Combine internal and external evidence into unified context.
         
@@ -344,7 +426,8 @@ class StonecutterSignal:
         logger.info("Building unified context from internal and external sources")
         
         # Start with internal context
-        unified_text = f"INTERNAL CONTEXT:\n{internal_context or 'No internal context available'}\n\n"
+        context_text = internal_context.get('context_text', 'No internal context available') if internal_context else 'No internal context available'
+        unified_text = f"INTERNAL CONTEXT:\n{context_text}\n\n"
         
         # Add external evidence
         unified_text += "EXTERNAL EVIDENCE:\n"
@@ -374,12 +457,13 @@ class StonecutterSignal:
         logger.info(f"Built unified context with {len(unified_text)} characters")
         return unified_text
     
-    def evaluate_signal(self, unified_context: str) -> Dict[str, Any]:
+    def evaluate_signal(self, unified_context: str, channels: Optional[str] = None) -> Dict[str, Any]:
         """
         Evaluate the unified context and produce Signal scores in JSON format.
         
         Args:
             unified_context: The unified context string
+            channels: Optional channels information for distribution_fit scoring
             
         Returns:
             Dictionary with Signal scores and metrics
@@ -387,7 +471,44 @@ class StonecutterSignal:
         logger.info("Evaluating Signal scores from unified context")
         
         try:
-            prompt = f"""You are a creative effectiveness analyst.
+            # Build scoring prompt based on whether channels are provided
+            base_scores = [
+                "cultural_fit", "clarity", "emotional_resonance", 
+                "differentiation", "conversation_fit", "memorability"
+            ]
+            
+            if channels:
+                # Include distribution_fit scoring
+                prompt = f"""You are a creative effectiveness analyst.
+Using only the following context:
+
+---CONTEXT START---
+{unified_context}
+---CONTEXT END---
+
+Distribution Channels: {channels}
+
+Evaluate the campaign against the Stonecutter Signal Index.
+Return a JSON object with:
+{{
+  "scores": {{
+      "cultural_fit": (0–100),
+      "clarity": (0–100),
+      "emotional_resonance": (0–100),
+      "differentiation": (0–100),
+      "conversation_fit": (0–100),
+      "memorability": (0–100),
+      "distribution_fit": (0–100)
+  }},
+  "reasoning": "short explanation of why this overall score was given"
+}}
+
+Note: 
+- conversation_fit measures how well the creative matches environments where people talk about it
+- distribution_fit measures how well suited the creative is for the specified distribution channels"""
+            else:
+                # Exclude distribution_fit scoring
+                prompt = f"""You are a creative effectiveness analyst.
 Using only the following context:
 
 ---CONTEXT START---
@@ -402,11 +523,13 @@ Return a JSON object with:
       "clarity": (0–100),
       "emotional_resonance": (0–100),
       "differentiation": (0–100),
-      "platform_fit": (0–100),
+      "conversation_fit": (0–100),
       "memorability": (0–100)
   }},
   "reasoning": "short explanation of why this overall score was given"
-}}"""
+}}
+
+Note: conversation_fit measures how well the creative matches environments where people talk about it"""
             
             response = openai_client.chat.completions.create(
                 model="gpt-4o",
@@ -420,23 +543,37 @@ Return a JSON object with:
             )
             
             result = json.loads(response.choices[0].message.content)
+            
+            # Add distribution_fit note if channels not provided
+            if not channels and 'scores' in result:
+                result['distribution_fit_note'] = "Distribution Fit not evaluated (channels not provided)"
+            
             logger.info("Successfully evaluated Signal scores")
             return result
             
         except Exception as e:
             logger.error(f"Failed to evaluate signal: {str(e)}")
             # Fallback scores
-            return {
-                "scores": {
-                    "cultural_fit": 50,
-                    "clarity": 50,
-                    "emotional_resonance": 50,
-                    "differentiation": 50,
-                    "platform_fit": 50,
-                    "memorability": 50
-                },
+            fallback_scores = {
+                "cultural_fit": 50,
+                "clarity": 50,
+                "emotional_resonance": 50,
+                "differentiation": 50,
+                "conversation_fit": 50,
+                "memorability": 50
+            }
+            
+            fallback_result = {
+                "scores": fallback_scores,
                 "reasoning": "Unable to evaluate due to error. Default scores provided."
             }
+            
+            if channels:
+                fallback_result["scores"]["distribution_fit"] = 50
+            else:
+                fallback_result['distribution_fit_note'] = "Distribution Fit not evaluated (channels not provided)"
+            
+            return fallback_result
     
     def synthesize_story(self, scores: Dict[str, Any], context: str) -> str:
         """
@@ -537,6 +674,11 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
     engine = StonecutterSignal()
     
     try:
+        # Step 0: Parse brief fields to extract optional Audience and Channels
+        brief_fields = engine.parse_brief_fields(brief)
+        audience = brief_fields.get('audience')
+        channels = brief_fields.get('channels')
+        
         # Step 1: Separate concepts if multiple exist
         # TODO: Handle multiple concepts by processing each separately
         concepts = engine.separate_concepts(brief)
@@ -554,14 +696,15 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
         classification = engine.classify_concept_and_archetype(current_concept)
         
         # Step 4: Select relevant evidence sources
-        # TODO: Use cluster and archetype for source selection
+        # TODO: Use cluster and archetype for source selection  
+        # TODO: Consider audience field for future source routing improvements
         cluster = classification.get('cluster', '')
         archetype = classification.get('archetype', '')
         sources = engine.select_sources(cluster, archetype)
         
         # Step 5: Gather internal context and analogies
         # TODO: Combine with external evidence
-        internal_context = engine.get_internal_context(current_concept)
+        internal_context = engine.get_internal_context(current_concept, audience)
         
         # Step 6: Collect external evidence with resilience
         # TODO: Gather evidence from all selected sources
@@ -575,12 +718,10 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
         
         # Step 7: Build unified context
         # TODO: Merge internal and external data effectively
-        # Convert internal_context to string if it's not already
-        internal_context_str = str(internal_context) if internal_context else "No internal context available"
-        unified_context = engine.build_unified_context(internal_context_str, external_evidence)
+        unified_context = engine.build_unified_context(internal_context, external_evidence)
         
-        # Step 8: Evaluate and score the signal
-        signal_scores = engine.evaluate_signal(unified_context)
+        # Step 8: Evaluate and score the signal (with channels for distribution_fit)
+        signal_scores = engine.evaluate_signal(unified_context, channels)
         
         # Step 9: Synthesize executive summary
         signal_story = engine.synthesize_story(signal_scores, unified_context)
@@ -595,6 +736,7 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
         # Step 10: Validate final output
         # TODO: Ensure JSON compliance and completeness
         final_results = {
+            'brief_fields': brief_fields,
             'concepts': concepts,
             'classification': classification,
             'sources_used': sources,
@@ -624,7 +766,7 @@ if __name__ == "__main__":
     print()
     
     # Prompt user for campaign brief input
-    user_brief = input("📝 Please paste your full campaign brief (Brand, Category, Concept, and Mode): ")
+    user_brief = input("📝 Please paste your full campaign brief (Brand, Category, Concept, Mode, and optionally Audience and Channels): ")
     
     print("\nRunning analysis for your campaign brief...")
     

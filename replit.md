@@ -14,13 +14,14 @@ Preferred communication style: Simple, everyday language.
 The system follows a pipeline architecture with sequential processing steps, each handling a specific aspect of campaign brief analysis. The main orchestration happens in Python (`StonecutterSignal` class) while leveraging OpenAI API calls for reasoning tasks.
 
 ### Processing Pipeline
+- **Brief Parsing**: Extracts structured fields including optional Audience and Channels information
 - **Concept Separation**: Detects and splits multiple concepts within a single brief
 - **Brand Clarification**: Enhances insufficient brand/context information
 - **Classification**: Categorizes concepts using cluster and cultural archetype frameworks
 - **Evidence Selection**: Identifies the top 3 most relevant evidence sources
 - **Data Gathering**: Combines historical data with real-time evidence from external APIs
-- **Context Building**: Merges internal LLM context with external data sources
-- **Signal Evaluation**: Produces diagnostic scores in JSON format
+- **Context Building**: Merges internal LLM context with external data sources (includes audience targeting)
+- **Signal Evaluation**: Produces diagnostic scores in JSON format with conditional distribution_fit scoring
 - **Story Synthesis**: Generates executive summaries based on scores and context
 
 ### Resilience Mechanisms
@@ -38,6 +39,22 @@ The architecture includes placeholder hooks for future enhancements:
 - Owned data ingestion capabilities
 - Multi-concept scenario analysis
 - Cultural archetype reframing functionality
+
+## Recent Updates (August 2025)
+
+### Enhanced Intake System
+- **Optional Fields**: Added support for Audience and Channels fields in campaign briefs
+- **Backwards Compatibility**: System operates normally when optional fields are absent
+- **Structured Parsing**: OpenAI-powered extraction of brief components into structured data
+
+### Updated Scoring Framework
+- **Renamed Metric**: "platform_fit" → "conversation_fit" (measures creative fit for discussion environments)
+- **Conditional Scoring**: "distribution_fit" scored only when Channels field provided
+- **Clear Notifications**: Explicit notes when distribution analysis unavailable
+
+### Improved Context Integration
+- **Audience Targeting**: Target demographic information included in internal context when available
+- **Enhanced Narratives**: Signal Story generation incorporates audience insights for better recommendations
 
 ## External Dependencies
 
