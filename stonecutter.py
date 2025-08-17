@@ -620,16 +620,15 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    # Test run with Dove Real Beauty brief
-    sample_brief = """Brand: Dove
-Industry: Beauty / Personal Care
-Campaign Title: Real Beauty (2004 Launch)
-Concept: The original Real Beauty campaign launched in 2004 featuring real women instead of models in order to challenge conventional beauty standards. The message encouraged self-confidence and authenticity, positioning Dove as a socially responsible brand advocating for inclusive beauty."""
-    
     print("=== STONECUTTER SIGNAL ANALYSIS ===")
-    print("Running analysis for Dove Real Beauty campaign...")
+    print()
     
-    result = run_signal_engine(sample_brief)
+    # Prompt user for campaign brief input
+    user_brief = input("📝 Please paste your full campaign brief (Brand, Category, Concept, and Mode): ")
+    
+    print("\nRunning analysis for your campaign brief...")
+    
+    result = run_signal_engine(user_brief)
     
     print("\n=== COMPLETE ANALYSIS RESULTS ===")
     print(json.dumps(result, indent=2))
