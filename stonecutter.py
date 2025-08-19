@@ -536,8 +536,9 @@ Return JSON:
         # TODO: Implement Twitter API v2 recent search
         # Endpoint: https://api.twitter.com/2/tweets/search/recent
         # Use Bearer Token from config
-        # Query should combine concept and audience as keywords
-        logger.info(f"Twitter API call - Concept: {concept}, Audience: {audience}")
+        # Query construction: query = f"{concept} {audience}"
+        query = f"{concept} {audience}".strip()
+        logger.info(f"Twitter API call - Query: {query}")
         raise NotImplementedError("Twitter API v2 integration not yet implemented")
     
     def call_core_llm_panel(self, concept: str, audience: str = "") -> Dict[str, Any]:
