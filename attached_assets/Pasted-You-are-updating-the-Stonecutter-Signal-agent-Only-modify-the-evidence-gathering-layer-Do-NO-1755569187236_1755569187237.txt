@@ -1,0 +1,47 @@
+You are updating the Stonecutter Signal agent.
+Only modify the **evidence gathering layer**.  
+Do NOT change or remove any of the following:
+- intake parsing
+- concept classification
+- clarification logic
+- scoring logic
+- Signal Story generation
+
+Refactor the evidence routing logic using the specifications below:
+
+1. ✅ KEEP Google Trends calls active in both Real-Time and Historic modes.
+   • Continue using the current Google Trends function to pull trend data.
+
+2. ✅ ADD Twitter/X 7-day Recent Search API call (ONLY in Real-Time Mode).
+   • Use the endpoint: https://api.twitter.com/2/tweets/search/recent
+   • Query string should use the concept and audience fields as keywords.
+   • Limit to max_results=50.
+   • Use the “Bearer Token” from the config as the Authorization header.
+   • Skip this Twitter call entirely in Historic mode.
+
+3. ❌ DISABLE direct API calls to Reddit and TikTok (temporarily).
+   • Skip make_resilient_external_call() for those sources.
+   • Instead, log “DIRECT_API_CALL_SKIPPED” and continue.
+
+4. ✅ ADD **Core LLM Evidence Panel** — always invoked in both Real-Time and Historic modes (run calls in parallel):
+   • Claude
+   • Perplexity
+   • Gemini
+   • Grok
+   Prompt each with:
+     “Summarize the current public sentiment and emerging cultural discourse related to the following campaign concept in <audience> context, including any key topics, positive/negative sentiment themes, and cultural momentum signals: <concept description>”
+
+5. ✅ ADD **Conditional Specialist LLMs** (called sequentially after core panel, only when relevant):
+   • If concept/category relates to finance/investing → call BloombergGPT
+   • If audience or territory is non-US or multilingual → call Aleph Alpha
+   • If concept is non-US youth / Gen-Z centric → call Mistral  
+   • If concept relates to global news / public policy → call GDELT API
+
+6. ✅ Aggregate all returned evidence (Twitter results + GoogleTrends + all LLM responses) into a single **unified evidence string**, and pass it into the existing scoring / Signal Story logic exactly as external cultural context.
+
+7. ⚠️ Do not alter the structure of the final JSON output.
+
+8. Add a TODO at the top of the evidence routing function:
+   “# TODO: Re-enable Reddit/TikTok direct calls or replace with Brandwatch API when ready.”
+
+When complete, reply with ✔️ “Evidence layer refactor complete” and a short summary of changes.

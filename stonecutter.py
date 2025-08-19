@@ -521,6 +521,296 @@ Return JSON:
         # TODO: Implement actual TikTok API call
         raise NotImplementedError("TikTok API integration not yet implemented")
     
+    def fetch_twitter_recent_search(self, concept: str, audience: str = "", max_results: int = 50) -> Dict[str, Any]:
+        """
+        Fetch recent tweets using Twitter API v2 search/recent endpoint.
+        
+        Args:
+            concept: Campaign concept for search query
+            audience: Target audience for query refinement
+            max_results: Maximum number of results (default 50)
+            
+        Returns:
+            Dictionary with Twitter search results
+        """
+        # TODO: Implement Twitter API v2 recent search
+        # Endpoint: https://api.twitter.com/2/tweets/search/recent
+        # Use Bearer Token from config
+        # Query should combine concept and audience as keywords
+        logger.info(f"Twitter API call - Concept: {concept}, Audience: {audience}")
+        raise NotImplementedError("Twitter API v2 integration not yet implemented")
+    
+    def call_core_llm_panel(self, concept: str, audience: str = "") -> Dict[str, Any]:
+        """
+        Call Core LLM Evidence Panel (Claude, Perplexity, Gemini, Grok) in parallel.
+        
+        Args:
+            concept: Campaign concept description
+            audience: Target audience context
+            
+        Returns:
+            Dictionary with all LLM responses
+        """
+        logger.info("Calling Core LLM Evidence Panel")
+        
+        prompt = f"Summarize the current public sentiment and emerging cultural discourse related to the following campaign concept in {audience or 'general'} context, including any key topics, positive/negative sentiment themes, and cultural momentum signals: {concept}"
+        
+        # TODO: Implement parallel calls to Claude, Perplexity, Gemini, Grok
+        # For now, using OpenAI as placeholder for all LLMs
+        try:
+            responses = {}
+            llm_models = ['claude', 'perplexity', 'gemini', 'grok']
+            
+            for llm in llm_models:
+                try:
+                    # Placeholder using OpenAI for all LLM calls
+                    response = openai_client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {
+                                "role": "user", 
+                                "content": f"[{llm.upper()} SIMULATION] {prompt}"
+                            }
+                        ]
+                    )
+                    responses[llm] = response.choices[0].message.content
+                    logger.info(f"Successfully called {llm} LLM")
+                except Exception as e:
+                    logger.error(f"Failed to call {llm}: {str(e)}")
+                    responses[llm] = f"Error calling {llm}: {str(e)}"
+            
+            return {
+                'source': 'core_llm_panel',
+                'status': 'success',
+                'data': responses
+            }
+            
+        except Exception as e:
+            logger.error(f"Core LLM panel failed: {str(e)}")
+            return {
+                'source': 'core_llm_panel',
+                'status': 'failed',
+                'error': str(e)
+            }
+    
+    def call_specialist_llms(self, concept: str, audience: str = "", category: str = "") -> Dict[str, Any]:
+        """
+        Call specialist LLMs based on concept/audience criteria.
+        
+        Args:
+            concept: Campaign concept description
+            audience: Target audience
+            category: Campaign category/industry
+            
+        Returns:
+            Dictionary with specialist LLM responses
+        """
+        logger.info("Evaluating specialist LLM requirements")
+        
+        specialist_responses = {}
+        
+        # Check criteria for specialist LLMs
+        concept_lower = concept.lower()
+        audience_lower = (audience or "").lower()
+        category_lower = (category or "").lower()
+        
+        try:
+            # BloombergGPT for finance/investing
+            if any(term in concept_lower or term in category_lower for term in ['finance', 'financial', 'investing', 'investment', 'bank', 'fintech', 'crypto', 'trading']):
+                logger.info("Calling BloombergGPT for finance context")
+                # TODO: Implement actual BloombergGPT API call
+                specialist_responses['bloomberg_gpt'] = "BloombergGPT financial analysis placeholder"
+            
+            # Aleph Alpha for non-US/multilingual
+            if any(term in audience_lower for term in ['international', 'global', 'european', 'asian', 'multilingual', 'non-us']):
+                logger.info("Calling Aleph Alpha for international context")
+                # TODO: Implement actual Aleph Alpha API call
+                specialist_responses['aleph_alpha'] = "Aleph Alpha international analysis placeholder"
+            
+            # Mistral for non-US youth/Gen-Z
+            if any(term in audience_lower for term in ['gen-z', 'genz', 'youth', 'young', 'teen']) and any(term in audience_lower for term in ['international', 'global', 'non-us']):
+                logger.info("Calling Mistral for international youth context")
+                # TODO: Implement actual Mistral API call
+                specialist_responses['mistral'] = "Mistral international youth analysis placeholder"
+            
+            # GDELT for global news/public policy
+            if any(term in concept_lower or term in category_lower for term in ['news', 'policy', 'political', 'government', 'public', 'global', 'world']):
+                logger.info("Calling GDELT API for global news context")
+                # TODO: Implement actual GDELT API call
+                specialist_responses['gdelt'] = "GDELT global news analysis placeholder"
+            
+            return {
+                'source': 'specialist_llms',
+                'status': 'success',
+                'data': specialist_responses
+            }
+            
+        except Exception as e:
+            logger.error(f"Specialist LLMs failed: {str(e)}")
+            return {
+                'source': 'specialist_llms',
+                'status': 'failed',
+                'error': str(e)
+            }
+    
+    def gather_comprehensive_evidence(self, concept: str, audience: str = "", category: str = "", mode: str = "real-time") -> Dict[str, Any]:
+        """
+        # TODO: Re-enable Reddit/TikTok direct calls or replace with Brandwatch API when ready.
+        
+        Comprehensive evidence gathering using new layered approach.
+        
+        Args:
+            concept: Campaign concept description
+            audience: Target audience
+            category: Campaign category/industry  
+            mode: "real-time" or "historic" analysis mode
+            
+        Returns:
+            Dictionary with aggregated evidence from all sources
+        """
+        logger.info(f"Starting comprehensive evidence gathering - Mode: {mode}")
+        
+        evidence_results = {}
+        sources_attempted = []
+        sources_successful = []
+        
+        try:
+            # 1. Google Trends (always active in both modes)
+            logger.info("Gathering Google Trends data")
+            sources_attempted.append('google_trends')
+            try:
+                # Keep existing Google Trends call active
+                trends_result = self.fetch_google_trends(concept)
+                evidence_results['google_trends'] = trends_result
+                sources_successful.append('google_trends')
+            except Exception as e:
+                logger.info(f"Google Trends call failed (expected): {str(e)}")
+                evidence_results['google_trends'] = {'status': 'failed', 'error': str(e)}
+            
+            # 2. Twitter/X Recent Search (only in Real-Time mode)
+            if mode.lower() == "real-time":
+                logger.info("Gathering Twitter/X recent search data (Real-Time mode)")
+                sources_attempted.append('twitter_recent')
+                try:
+                    twitter_result = self.fetch_twitter_recent_search(concept, audience)
+                    evidence_results['twitter_recent'] = twitter_result
+                    sources_successful.append('twitter_recent')
+                except Exception as e:
+                    logger.info(f"Twitter API call failed (expected): {str(e)}")
+                    evidence_results['twitter_recent'] = {'status': 'failed', 'error': str(e)}
+            else:
+                logger.info("Skipping Twitter/X call (Historic mode)")
+            
+            # 3. Skip Reddit and TikTok direct API calls
+            for skipped_source in ['reddit', 'tiktok']:
+                sources_attempted.append(skipped_source)
+                logger.info(f"DIRECT_API_CALL_SKIPPED: {skipped_source}")
+                evidence_results[skipped_source] = {
+                    'status': 'skipped',
+                    'message': 'DIRECT_API_CALL_SKIPPED - temporarily disabled'
+                }
+            
+            # 4. Core LLM Evidence Panel (always called in parallel)
+            logger.info("Calling Core LLM Evidence Panel")
+            sources_attempted.append('core_llm_panel')
+            core_llm_result = self.call_core_llm_panel(concept, audience)
+            evidence_results['core_llm_panel'] = core_llm_result
+            if core_llm_result.get('status') == 'success':
+                sources_successful.append('core_llm_panel')
+            
+            # 5. Conditional Specialist LLMs (sequential after core panel)
+            logger.info("Evaluating Specialist LLM requirements")
+            sources_attempted.append('specialist_llms')
+            specialist_result = self.call_specialist_llms(concept, audience, category)
+            evidence_results['specialist_llms'] = specialist_result
+            if specialist_result.get('status') == 'success':
+                sources_successful.append('specialist_llms')
+            
+            # 6. Aggregate all evidence into unified string
+            unified_evidence = self.aggregate_evidence_to_string(evidence_results)
+            
+            return {
+                'status': 'success',
+                'mode': mode,
+                'sources_attempted': sources_attempted,
+                'sources_successful': sources_successful,
+                'evidence_results': evidence_results,
+                'unified_evidence': unified_evidence
+            }
+            
+        except Exception as e:
+            logger.error(f"Comprehensive evidence gathering failed: {str(e)}")
+            return {
+                'status': 'failed',
+                'mode': mode,
+                'sources_attempted': sources_attempted,
+                'sources_successful': sources_successful,
+                'error': str(e),
+                'unified_evidence': "Evidence gathering failed"
+            }
+    
+    def aggregate_evidence_to_string(self, evidence_results: Dict[str, Any]) -> str:
+        """
+        Aggregate all evidence sources into a single unified evidence string.
+        
+        Args:
+            evidence_results: Dictionary of evidence from all sources
+            
+        Returns:
+            Unified evidence string for scoring/story analysis
+        """
+        logger.info("Aggregating evidence into unified string")
+        
+        evidence_sections = []
+        
+        # Google Trends data
+        if 'google_trends' in evidence_results:
+            trends = evidence_results['google_trends']
+            if trends.get('status') != 'failed':
+                evidence_sections.append(f"GOOGLE TRENDS: {str(trends)}")
+            else:
+                evidence_sections.append("GOOGLE TRENDS: Data unavailable")
+        
+        # Twitter recent search data
+        if 'twitter_recent' in evidence_results:
+            twitter = evidence_results['twitter_recent']
+            if twitter.get('status') != 'failed':
+                evidence_sections.append(f"TWITTER RECENT: {str(twitter)}")
+            else:
+                evidence_sections.append("TWITTER RECENT: Data unavailable")
+        
+        # Core LLM Panel responses
+        if 'core_llm_panel' in evidence_results:
+            core_llms = evidence_results['core_llm_panel']
+            if core_llms.get('status') == 'success' and 'data' in core_llms:
+                evidence_sections.append("CORE LLM ANALYSIS:")
+                for llm, response in core_llms['data'].items():
+                    evidence_sections.append(f"  {llm.upper()}: {response}")
+            else:
+                evidence_sections.append("CORE LLM ANALYSIS: Analysis unavailable")
+        
+        # Specialist LLM responses
+        if 'specialist_llms' in evidence_results:
+            specialists = evidence_results['specialist_llms']
+            if specialists.get('status') == 'success' and 'data' in specialists and specialists['data']:
+                evidence_sections.append("SPECIALIST LLM ANALYSIS:")
+                for llm, response in specialists['data'].items():
+                    evidence_sections.append(f"  {llm.upper()}: {response}")
+        
+        # Skipped sources note
+        skipped_sources = []
+        for source in ['reddit', 'tiktok']:
+            if source in evidence_results and evidence_results[source].get('status') == 'skipped':
+                skipped_sources.append(source)
+        
+        if skipped_sources:
+            evidence_sections.append(f"NOTE: Direct API calls temporarily disabled for: {', '.join(skipped_sources)}")
+        
+        unified_evidence = '\n\n'.join(evidence_sections)
+        logger.info(f"Created unified evidence string with {len(unified_evidence)} characters")
+        
+        return unified_evidence
+    
     def build_unified_context(self, internal_context: Dict[str, Any], external_results: List[Dict[str, Any]]) -> str:
         """
         Combine internal and external evidence into unified context.
@@ -832,34 +1122,28 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
         # TODO: Combine with external evidence
         internal_context = engine.get_internal_context(current_concept, audience)
         
-        # Step 6: Collect external evidence with resilience and fallback routing
-        # TODO: Gather evidence from all selected sources
-        external_evidence = []
-        sources_attempted = []
-        sources_successful = []
+        # Step 6: Comprehensive Evidence Gathering (New Layered Approach)
+        # Get category from brief fields for specialist LLM routing
+        category = brief_fields.get('category', '')
         
-        for source in sources:
-            try:
-                evidence = engine.resilient_external_call(source, current_concept)
-                external_evidence.append(evidence)
-                sources_attempted.append(source)
-                
-                # Track successful vs failed sources
-                if evidence and evidence.get('status') != 'failed':
-                    sources_successful.append(source)
-                elif evidence and evidence.get('attempted_fallback'):
-                    # If fallback was attempted, add both original and fallback to attempted list
-                    fallback_source = engine.get_fallback_source(source)
-                    if fallback_source:
-                        sources_attempted.append(fallback_source)
-                        
-            except Exception as e:
-                logger.error(f"Failed to gather evidence from {source}: {str(e)}")
-                sources_attempted.append(source)
+        # Use new comprehensive evidence gathering system
+        evidence_data = engine.gather_comprehensive_evidence(
+            concept=current_concept,
+            audience=audience or "",
+            category=category,
+            mode="real-time"  # TODO: Allow user to specify mode
+        )
         
-        # Step 7: Build unified context
-        # TODO: Merge internal and external data effectively
-        unified_context = engine.build_unified_context(internal_context, external_evidence)
+        # Extract tracking information for final results
+        sources_attempted = evidence_data.get('sources_attempted', [])
+        sources_successful = evidence_data.get('sources_successful', [])
+        
+        # Step 7: Build unified context using new evidence approach
+        # Combine internal context with unified evidence string
+        internal_context_text = internal_context.get('context_text', 'No internal context available')
+        unified_evidence_text = evidence_data.get('unified_evidence', 'No evidence available')
+        
+        unified_context = f"INTERNAL CONTEXT:\n{internal_context_text}\n\nEXTERNAL CULTURAL EVIDENCE:\n{unified_evidence_text}"
         
         # Step 8: Evaluate and score the signal (with channels for distribution_fit)
         signal_scores = engine.evaluate_signal(unified_context, channels)

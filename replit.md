@@ -69,6 +69,15 @@ The architecture includes placeholder hooks for future enhancements:
 - **Enhanced Tracking**: Detailed logging of sources planned, attempted, and successful
 - **Graceful Degradation**: Continues with OpenAI suggestions when both primary and fallback sources fail
 
+### Evidence Layer Refactor (Latest)
+- **Layered Architecture**: Multi-tier evidence gathering with Core LLM Panel + Specialist LLMs
+- **Mode Support**: Real-time vs Historic analysis modes with conditional API routing
+- **Core LLM Panel**: Parallel calls to Claude, Perplexity, Gemini, Grok for cultural analysis
+- **Specialist LLMs**: Conditional routing (BloombergGPT for finance, Aleph Alpha for international, Mistral for global youth, GDELT for news/policy)
+- **Unified Evidence**: All sources aggregated into single cultural context string
+- **API Management**: Twitter v2 Recent Search (real-time only), Google Trends (always active), Reddit/TikTok temporarily disabled
+- **Backwards Compatibility**: Preserves all existing scoring and output structures
+
 ## External Dependencies
 
 ### AI Services
