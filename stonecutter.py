@@ -99,6 +99,74 @@ Brief: {brief}"""
                 'channels': None
             }
     
+    def check_audience_channels_specificity(self, audience: Optional[str], channels: Optional[str]) -> Dict[str, Any]:
+        """
+        Check if audience and channels are sufficiently specific for analysis.
+        
+        Args:
+            audience: The audience field from brief parsing
+            channels: The channels field from brief parsing
+            
+        Returns:
+            Dictionary with specificity assessment and clarification question if needed
+        """
+        logger.info("Checking audience and channels specificity")
+        
+        try:
+            # Build prompt to assess specificity
+            assessment_prompt = f"""You are a campaign strategist. Assess whether the following audience and channels information is sufficiently specific for campaign analysis:
+
+Audience: {audience or "Not provided"}
+Channels: {channels or "Not provided"}
+
+For each field, determine if it's:
+1. Missing (None/null/empty)
+2. Too vague (e.g., "general audience", "all platforms", "everyone", "digital")  
+3. Sufficiently specific
+
+If either field needs clarification, ask ONE clarification question for the most critical missing piece.
+
+Return JSON:
+{{
+  "audience_specific": true/false,
+  "channels_specific": true/false, 
+  "needs_clarification": true/false,
+  "clarification_question": "question text or null"
+}}"""
+
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": assessment_prompt
+                    }
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            
+            logger.info(f"Specificity check - Audience: {'specific' if result.get('audience_specific') else 'needs clarification'}, "
+                       f"Channels: {'specific' if result.get('channels_specific') else 'needs clarification'}")
+            
+            return {
+                'audience_specific': result.get('audience_specific', True),
+                'channels_specific': result.get('channels_specific', True), 
+                'needs_clarification': result.get('needs_clarification', False),
+                'clarification_question': result.get('clarification_question')
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to check audience/channels specificity: {str(e)}")
+            # Default to no clarification needed on error
+            return {
+                'audience_specific': True,
+                'channels_specific': True,
+                'needs_clarification': False,
+                'clarification_question': None
+            }
+    
     def separate_concepts(self, brief: str) -> List[str]:
         """
         Analyze campaign brief and detect if multiple concepts exist.
@@ -694,6 +762,23 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
         # Step 3: Classify concept and determine archetype
         # TODO: Use classification results to guide analysis
         classification = engine.classify_concept_and_archetype(current_concept)
+        
+        # Step 3.5: Check if audience/channels need clarification
+        specificity_check = engine.check_audience_channels_specificity(audience, channels)
+        
+        if specificity_check.get('needs_clarification') and specificity_check.get('clarification_question'):
+            print(f"\n🤔 {specificity_check['clarification_question']}")
+            clarification_response = input("Your answer: ")
+            
+            # Update the appropriate field based on the clarification
+            if not specificity_check.get('audience_specific') and (not audience or audience.lower() in ['general audience', 'everyone', 'all']):
+                brief_fields['audience'] = clarification_response
+                audience = clarification_response
+                logger.info(f"Updated audience with clarification: {audience}")
+            elif not specificity_check.get('channels_specific') and (not channels or channels.lower() in ['all platforms', 'digital', 'everywhere']):
+                brief_fields['channels'] = clarification_response  
+                channels = clarification_response
+                logger.info(f"Updated channels with clarification: {channels}")
         
         # Step 4: Select relevant evidence sources
         # TODO: Use cluster and archetype for source selection  

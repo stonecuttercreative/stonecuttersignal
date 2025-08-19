@@ -18,6 +18,7 @@ The system follows a pipeline architecture with sequential processing steps, eac
 - **Concept Separation**: Detects and splits multiple concepts within a single brief
 - **Brand Clarification**: Enhances insufficient brand/context information
 - **Classification**: Categorizes concepts using cluster and cultural archetype frameworks
+- **Audience/Channels Clarification**: Interactive check for specificity of targeting and distribution fields
 - **Evidence Selection**: Identifies the top 3 most relevant evidence sources
 - **Data Gathering**: Combines historical data with real-time evidence from external APIs
 - **Context Building**: Merges internal LLM context with external data sources (includes audience targeting)
@@ -55,6 +56,12 @@ The architecture includes placeholder hooks for future enhancements:
 ### Improved Context Integration
 - **Audience Targeting**: Target demographic information included in internal context when available
 - **Enhanced Narratives**: Signal Story generation incorporates audience insights for better recommendations
+
+### Interactive Clarification System
+- **Smart Detection**: AI-powered assessment of audience and channels specificity
+- **Targeted Questions**: Single clarification question for missing or vague targeting information
+- **Seamless Continuation**: Analysis resumes from classification point after user input
+- **Quality Control**: Prevents analysis with insufficient targeting context
 
 ## External Dependencies
 
