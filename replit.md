@@ -63,6 +63,12 @@ The architecture includes placeholder hooks for future enhancements:
 - **Seamless Continuation**: Analysis resumes from classification point after user input
 - **Quality Control**: Prevents analysis with insufficient targeting context
 
+### Fallback Routing System
+- **Automatic Failover**: Predefined hierarchy for data source failures (reddit→twitter, tiktok→instagram, google_trends→semrush)
+- **Single Attempt**: One fallback attempt per source to prevent infinite switching
+- **Enhanced Tracking**: Detailed logging of sources planned, attempted, and successful
+- **Graceful Degradation**: Continues with OpenAI suggestions when both primary and fallback sources fail
+
 ## External Dependencies
 
 ### AI Services

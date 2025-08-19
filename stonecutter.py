@@ -167,6 +167,28 @@ Return JSON:
                 'clarification_question': None
             }
     
+    def get_fallback_source(self, failed_source: str) -> Optional[str]:
+        """
+        Get fallback source based on predefined hierarchy.
+        
+        Args:
+            failed_source: The source that failed
+            
+        Returns:
+            Fallback source name or None if no fallback available
+        """
+        fallback_map = {
+            'reddit': 'twitter',
+            'tiktok': 'instagram', 
+            'google_trends': 'semrush'
+        }
+        
+        fallback = fallback_map.get(failed_source)
+        if fallback:
+            logger.info(f"Fallback routing: {failed_source} → {fallback}")
+        
+        return fallback
+    
     def separate_concepts(self, brief: str) -> List[str]:
         """
         Analyze campaign brief and detect if multiple concepts exist.
@@ -392,16 +414,18 @@ Return JSON:
             'audience_included': bool(audience)
         }
     
-    def resilient_external_call(self, source: str, query_text: str = "") -> Dict[str, Any]:
+    def resilient_external_call(self, source: str, query_text: str = "", attempted_fallback: bool = False) -> Dict[str, Any]:
         """
-        Make external API call with resilience loop:
+        Make external API call with resilience loop and fallback routing:
         1. Retry once on failure
-        2. Use LLM diagnosis if retry fails
-        3. Ask for human action if needed
+        2. Try fallback source if available
+        3. Use LLM diagnosis if fallback also fails
+        4. Ask for human action if needed
         
         Args:
             source: External API source identifier
             query_text: Query text for the API call
+            attempted_fallback: Whether this is already a fallback attempt
             
         Returns:
             Dictionary with call results or error information
@@ -410,17 +434,20 @@ Return JSON:
         
         def make_external_call(source_name: str, query: str):
             """Make the actual external API call based on source type."""
-            if source_name == "reddit":
+            if source_name in ["reddit"]:
                 return self.fetch_reddit_posts(query)
-            elif source_name == "twitter":
+            elif source_name in ["twitter", "instagram"]:
                 return self.fetch_twitter_sentiment(query)
-            elif source_name == "google_trends":
+            elif source_name in ["google_trends", "semrush"]:
                 return self.fetch_google_trends(query)
+            elif source_name == "tiktok":
+                return self.fetch_tiktok_data(query)
             else:
                 raise ValueError(f"Unsupported source: {source_name}")
         
         last_error = None
         
+        # Try the primary source with retries
         for attempt in range(self.max_retries + 1):
             try:
                 result = make_external_call(source, query_text)
@@ -433,37 +460,46 @@ Return JSON:
                 if attempt < self.max_retries:
                     time.sleep(self.retry_delay)
                     continue
-                else:
-                    # Use OpenAI to suggest fallback
-                    try:
-                        response = openai_client.chat.completions.create(
-                            model="gpt-4o",
-                            messages=[
-                                {
-                                    "role": "user",
-                                    "content": f"The following external data source returned an error: {last_error}. Suggest a fallback or next-best source for this campaign analysis."
-                                }
-                            ]
-                        )
-                        
-                        fallback_suggestion = response.choices[0].message.content.strip()
-                        logger.info(f"OpenAI suggested fallback: {fallback_suggestion}")
-                        
-                        return {
-                            'source': source,
-                            'status': 'failed',
-                            'error': last_error,
-                            'fallback_suggestion': fallback_suggestion
-                        }
-                        
-                    except Exception as openai_error:
-                        logger.error(f"Failed to get OpenAI fallback suggestion: {str(openai_error)}")
-                        return {
-                            'source': source,
-                            'status': 'failed', 
-                            'error': last_error,
-                            'fallback_suggestion': 'Consider using alternative data sources or manual research'
-                        }
+        
+        # Primary source failed after retries - try fallback if available and not already attempted
+        if not attempted_fallback:
+            fallback_source = self.get_fallback_source(source)
+            if fallback_source:
+                logger.info(f"Attempting fallback routing from {source} to {fallback_source}")
+                return self.resilient_external_call(fallback_source, query_text, attempted_fallback=True)
+        
+        # Both primary and fallback failed - use OpenAI suggestion
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"The following external data source returned an error: {last_error}. Suggest a fallback or next-best source for this campaign analysis."
+                    }
+                ]
+            )
+            
+            fallback_suggestion = response.choices[0].message.content.strip()
+            logger.info(f"OpenAI suggested fallback: {fallback_suggestion}")
+            
+            return {
+                'source': source,
+                'status': 'failed',
+                'error': last_error,
+                'fallback_suggestion': fallback_suggestion,
+                'attempted_fallback': attempted_fallback
+            }
+            
+        except Exception as openai_error:
+            logger.error(f"Failed to get OpenAI fallback suggestion: {str(openai_error)}")
+            return {
+                'source': source,
+                'status': 'failed', 
+                'error': last_error,
+                'fallback_suggestion': 'Consider using alternative data sources or manual research',
+                'attempted_fallback': attempted_fallback
+            }
     
     def fetch_reddit_posts(self, query: str) -> Dict[str, Any]:
         """Placeholder for Reddit API integration."""
@@ -479,6 +515,11 @@ Return JSON:
         """Placeholder for Google Trends API integration."""
         # TODO: Implement actual Google Trends API call
         raise NotImplementedError("Google Trends API integration not yet implemented")
+    
+    def fetch_tiktok_data(self, query: str) -> Dict[str, Any]:
+        """Placeholder for TikTok API integration."""
+        # TODO: Implement actual TikTok API call
+        raise NotImplementedError("TikTok API integration not yet implemented")
     
     def build_unified_context(self, internal_context: Dict[str, Any], external_results: List[Dict[str, Any]]) -> str:
         """
@@ -791,15 +832,30 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
         # TODO: Combine with external evidence
         internal_context = engine.get_internal_context(current_concept, audience)
         
-        # Step 6: Collect external evidence with resilience
+        # Step 6: Collect external evidence with resilience and fallback routing
         # TODO: Gather evidence from all selected sources
         external_evidence = []
+        sources_attempted = []
+        sources_successful = []
+        
         for source in sources:
             try:
                 evidence = engine.resilient_external_call(source, current_concept)
                 external_evidence.append(evidence)
+                sources_attempted.append(source)
+                
+                # Track successful vs failed sources
+                if evidence and evidence.get('status') != 'failed':
+                    sources_successful.append(source)
+                elif evidence and evidence.get('attempted_fallback'):
+                    # If fallback was attempted, add both original and fallback to attempted list
+                    fallback_source = engine.get_fallback_source(source)
+                    if fallback_source:
+                        sources_attempted.append(fallback_source)
+                        
             except Exception as e:
                 logger.error(f"Failed to gather evidence from {source}: {str(e)}")
+                sources_attempted.append(source)
         
         # Step 7: Build unified context
         # TODO: Merge internal and external data effectively
@@ -824,7 +880,9 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
             'brief_fields': brief_fields,
             'concepts': concepts,
             'classification': classification,
-            'sources_used': sources,
+            'sources_planned': sources,
+            'sources_attempted': sources_attempted,
+            'sources_successful': sources_successful,
             'signal_scores': signal_scores,
             'signal_story': signal_story,
             'timestamp': time.time(),
