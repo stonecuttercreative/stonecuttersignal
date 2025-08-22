@@ -1,0 +1,200 @@
+You are my repo assistant. Keep the repo intact. Do not delete or rename existing files. Only extend them with clearly marked blocks:
+
+# BEGIN stonecutter extension: <desc>
+# END stonecutter extension
+
+Goal
+Enable a real Anthropic Claude provider alongside existing mocks. If the ANTHROPIC_API_KEY is unset, fall back to the mock path. Add simple telemetry (latency + token estimates) and a tiny A/B compare script to see Claude vs OpenAI contributions and the arbitrated output.
+
+1) Add dependency
+
+Append to pyproject.toml dependencies if not present:
+
+anthropic>=0.32.0
+
+Run pip install -e . after edits.
+
+2) Settings (ensure key + model name)
+
+Open src/stonecutter/settings.py and ensure these fields exist (add if missing):
+
+# BEGIN stonecutter extension: claude settings
+from pydantic import Field
+
+class Settings(BaseSettings):
+    # ...
+    anthropic_api_key: str | None = Field(default=None, env="ANTHROPIC_API_KEY")
+    claude_model: str = "claude-3-5-sonnet-20240620"  # adjust if needed
+# END stonecutter extension
+
+3) Claude provider — real API call with fallback
+
+Edit src/stonecutter/providers/anthropic_llm.py to use the real SDK. If the file doesn’t exist, create it.
+
+# BEGIN stonecutter extension: real Claude provider
+from typing import Dict, Any
+import json, asyncio, time
+from anthropic import Anthropic
+from ..settings import settings
+from ._mock_util import mock_complete
+
+PROMPT_WRAPPER = """You are a cultural diagnostics analyst.
+Return STRICT JSON ONLY, no prose.
+JSON schema:
+{{
+  "cluster": str,
+  "archetype": str,
+  "story": str,
+  "scores": {{
+    "cultural_fit": int, "clarity": int, "emotional_resonance": int,
+    "differentiation": int, "conversation_fit": int{extra_score}
+  }},
+  "claims": [str, str, str]
+}}
+Input:
+{input_block}
+"""
+
+class ClaudeProvider:
+    name = "claude"
+
+    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        # Soft fallback if disabled or no key
+        if not settings.enable_claude or not settings.anthropic_api_key:
+            return await mock_complete(self.name, prompt)
+
+        # Build wrapped prompt; include distribution_fit only when channels provided
+        extra = ', "distribution_fit": int' if ("Channels:" in prompt and "N/A" not in prompt) else ""
+        wrapped = PROMPT_WRAPPER.format(extra_score=extra, input_block=prompt)
+
+        # Call Claude using the Messages API
+        start = time.time()
+        try:
+            client = Anthropic(api_key=settings.anthropic_api_key)
+            # Claude is not async; run in thread to avoid blocking
+            def _call():
+                msg = client.messages.create(
+                    model=settings.claude_model,
+                    max_tokens=800,
+                    temperature=0.6,
+                    messages=[{"role": "user", "content": wrapped}],
+                )
+                return msg
+            loop = asyncio.get_running_loop()
+            msg = await loop.run_in_executor(None, _call)
+
+            # Extract text content
+            content = "".join([b.text for b in msg.content if getattr(b, "type", "") == "text"])
+            # Parse JSON strictly; if parse fails, fallback to mock
+            try:
+                data = json.loads(content)
+            except Exception:
+                return await mock_complete(self.name, prompt)
+
+            # Telemetry
+            data["_telemetry"] = {
+                "provider": self.name,
+                "latency_ms": int((time.time() - start) * 1000),
+                "model": settings.claude_model,
+                # token usage not always present; include when available
+                "input_tokens": getattr(getattr(msg, "usage", None), "input_tokens", None),
+                "output_tokens": getattr(getattr(msg, "usage", None), "output_tokens", None),
+            }
+            return data
+        except Exception:
+            # Never hard-fail the run; fallback to mock
+            return await mock_complete(self.name, prompt)
+# END stonecutter extension
+
+4) Tag provider names in engine panel (if not already)
+
+In src/stonecutter/engine.py, ensure we label each provider’s output:
+
+# BEGIN stonecutter extension: provider tag
+out = await m.complete(prompt)
+out["_provider_name"] = getattr(m, "name", "unknown")
+# END stonecutter extension
+
+5) Surface simple telemetry & contributions (optional but helpful)
+
+After arbitration in engine.py, if you build a final dict, add:
+
+# BEGIN stonecutter extension: telemetry bubble-up
+# include per-provider latencies if present
+provider_meta = []
+for r in panel_out:
+    meta = {
+        "provider": r.get("_provider_name"),
+        "latency_ms": (r.get("_telemetry") or {}).get("latency_ms"),
+        "model": (r.get("_telemetry") or {}).get("model"),
+    }
+    provider_meta.append(meta)
+final_result["providers"] = provider_meta
+# END stonecutter extension
+
+(adapt final_result to your object shape)
+
+6) A/B compare script
+
+Create compare_ab.py at repo root to quickly see Claude vs OpenAI vs Arbitrated output on one brief:
+
+# BEGIN stonecutter extension: compare script
+import asyncio, json
+from stonecutter.engine import run_signal
+from stonecutter.providers.registry import load_panel
+from stonecutter.settings import settings
+from stonecutter.engine import build_prompt  # if exposed; otherwise inline prompt build
+
+async def _panel(prompt: str):
+    panel = load_panel()
+    outs = []
+    for m in panel:
+        r = await m.complete(prompt)
+        r["_provider_name"] = getattr(m, "name", "unknown")
+        outs.append(r)
+    return outs
+
+def main():
+    brief = {
+        "brand":"Acme","category":"Finance","concept":"Clarity-first crypto education",
+        "mode":"realtime","audience":"Adults 25-45 seeking stability","channels":"YouTube, CTV"
+    }
+    result = asyncio.run(run_signal(brief))
+    print("\n=== ARBITRATED RESULT ===")
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    # Show raw provider contributions (names + top-level scores)
+    prompt = build_prompt(type("x",(object,),brief)()) if callable(getattr(build_prompt,"__call__",None)) else str(brief)
+    raw = asyncio.run(_panel(prompt))
+    print("\n=== PROVIDER CONTRIBUTIONS (first 2 shown if many) ===")
+    for r in raw[:6]:
+        name = r.get("_provider_name")
+        scores = r.get("scores", {})
+        print(f"- {name}: cultural_fit={scores.get('cultural_fit')} clarity={scores.get('clarity')} conversation_fit={scores.get('conversation_fit')}")
+
+if __name__ == "__main__":
+    main()
+# END stonecutter extension
+
+7) README note
+
+Append a short section to your README:
+
+### Using Claude (real API)
+Set `ANTHROPIC_API_KEY` in Replit secrets. If unset, Claude falls back to a mock so runs never fail.
+Check `compare_ab.py` to see per‑provider contributions and the arbitrated result.
+
+8) Run commands
+
+In the shell:
+
+pip install -e .
+python quick_check.py
+python compare_ab.py
+
+Expected:
+	•	quick_check.py still passes all 3 tests.
+	•	compare_ab.py prints an arbitrated result and lists each provider’s top scores. If the Anthropic key is set, you’ll see real Claude latency and (optionally) token usage in providers[].
+
+Finally print:
+Claude provider live with soft fallback; arbitration + telemetry verified.

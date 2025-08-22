@@ -8,4 +8,5 @@ dependencies = [
     "pydantic-settings>=2.10.1",
     "pydantic>=2.11.7",
     "requests>=2.32.4",
+    "anthropic>=0.32.0",
 ]

@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     perplexity_api_key: Optional[str] = Field(default=None, env="PERPLEXITY_API_KEY")
     mistral_api_key: Optional[str] = Field(default=None, env="MISTRAL_API_KEY")
 
+    # BEGIN stonecutter extension: claude settings
+    claude_model: str = "claude-3-5-sonnet-20240620"  # adjust if needed
+    # END stonecutter extension
+
     # Enable or disable each provider
     enable_openai: bool = True
     enable_claude: bool = True

@@ -1137,6 +1137,13 @@ CONTEXT:
                     arbitrated['notes'] = {}
                 arbitrated['notes']['distribution_fit'] = "Distribution Fit not evaluated (channels not provided)"
             
+            # BEGIN stonecutter extension: telemetry bubble-up
+            # Surface provider telemetry in final result
+            if PROVIDER_SYSTEM_AVAILABLE:
+                from src.stonecutter.engine import surface_telemetry
+                arbitrated["providers"] = surface_telemetry(responses)
+            # END stonecutter extension
+            
             return arbitrated
             
         except Exception as e:

@@ -48,8 +48,11 @@ The architecture includes placeholder hooks for future enhancements:
 
 ### Multi-Provider Arbitration System (Latest)
 - **Pluggable Architecture**: Added support for OpenAI, Anthropic Claude, Google Gemini, xAI Grok, Perplexity, and Mistral providers
+- **Real Claude Integration**: Anthropic Claude provider with actual API calls, telemetry tracking, and soft fallback to mock responses
 - **Soft Fallbacks**: When API keys are missing, providers automatically use mock responses so runs never fail
 - **Weighted Arbitration**: Provider responses are combined using configurable weights and confidence scoring from cross-model agreement
+- **Telemetry System**: Tracks latency, model information, and token usage per provider for performance monitoring
+- **A/B Comparison Tools**: Scripts to compare individual provider contributions versus arbitrated results
 - **Backward Compatibility**: All existing functionality preserved with seamless fallback to OpenAI-only mode when provider system unavailable
 - **Configuration System**: Comprehensive settings with feature flags, provider toggles, and weight configurations via environment variables
 
