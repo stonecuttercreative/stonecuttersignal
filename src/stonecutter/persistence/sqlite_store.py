@@ -10,6 +10,19 @@ from ..logging_conf import logger
 
 _CONN = None
 
+# BEGIN stonecutter fix: ts-seconds
+def _normalize_ts(value):
+    """Normalize timestamp to seconds, handling both seconds and milliseconds."""
+    try:
+        v = int(value)
+        # if value looks like milliseconds (13+ digits), convert to seconds
+        if v > 1_000_000_000_000:
+            v = v // 1000
+        return v
+    except Exception:
+        return None
+# END stonecutter fix: ts-seconds
+
 def init_db():
     """Initialize SQLite database with required tables."""
     global _CONN
@@ -72,9 +85,11 @@ def save_run(rec: Dict[str, Any]):
             
         cur = conn.cursor()
         
+        # BEGIN stonecutter fix: ts-seconds
         # Extract and validate required fields
         run_id = rec.get("id", str(uuid.uuid4()))
-        ts = rec.get("ts", rec.get("timestamp", int(time.time() * 1000)))
+        ts = _normalize_ts(rec.get("ts", rec.get("timestamp", int(time.time()))))
+        # END stonecutter fix: ts-seconds
         mode = rec.get("mode", "")
         brand = rec.get("brand", "")
         category = rec.get("category", "")
@@ -131,15 +146,19 @@ def last_runs(limit: int = 50) -> List[Dict[str, Any]]:
             return []
             
         cur = conn.cursor()
-        cur.execute("SELECT id, ts, brand, category, audience, channels, confidence, consensus, diversity FROM runs ORDER BY ts DESC LIMIT ?", (limit,))
+        # BEGIN stonecutter fix: ts-seconds
+        cur.execute("""SELECT id, ts, brand, category, audience, channels,
+                              confidence, consensus, diversity
+                       FROM runs ORDER BY ts DESC LIMIT ?""", (limit,))
         rows = cur.fetchall()
         
         results = [
             {
-                "id": r[0], 
-                "timestamp": r[1], 
+                "id": r[0],
+                "ts": _normalize_ts(r[1]),
+                "timestamp": _normalize_ts(r[1]),  # Keep both for compatibility
                 "brand": r[2], 
-                "category": r[3], 
+                "category": r[3],
                 "audience": r[4], 
                 "channels": r[5],
                 "confidence": r[6], 
@@ -148,6 +167,7 @@ def last_runs(limit: int = 50) -> List[Dict[str, Any]]:
             }
             for r in rows
         ]
+        # END stonecutter fix: ts-seconds
         
         logger.info(f"[persistence] Retrieved {len(results)} runs from database")
         return results

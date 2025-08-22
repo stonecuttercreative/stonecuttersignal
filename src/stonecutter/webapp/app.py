@@ -6,6 +6,20 @@ import datetime
 from ..persistence.sqlite_store import last_runs, get_run_details
 from ..logging_conf import logger
 
+# BEGIN stonecutter fix: ts-seconds
+def _fmt_ts(ts):
+    """Format timestamp safely, handling None and malformed values."""
+    if not ts:
+        return ""
+    try:
+        # ts already normalized to seconds; if not, best-effort fix:
+        if ts > 1_000_000_000_000:
+            ts = ts // 1000
+        return datetime.datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return str(ts)
+# END stonecutter fix: ts-seconds
+
 app = FastAPI(title="Stonecutter Signal Dashboard", version="1.0.0")
 
 @app.get("/health")
@@ -90,12 +104,10 @@ async def dashboard_home():
             """
         else:
             for run in runs:
-                # Format timestamp
-                if run.get('timestamp'):
-                    dt = datetime.datetime.fromtimestamp(run['timestamp'])
-                    formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S')
-                else:
-                    formatted_time = 'Unknown'
+                # BEGIN stonecutter fix: ts-seconds
+                # Format timestamp safely
+                formatted_time = _fmt_ts(run.get('ts', run.get('timestamp')))
+                # END stonecutter fix: ts-seconds
                 
                 # Truncate long text fields
                 brand = (run.get('brand') or 'Unknown')[:30]

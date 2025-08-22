@@ -17,11 +17,13 @@ print(f"Database path: {settings.db_path}")
 # Initialize
 init_db()
 
+# BEGIN stonecutter fix: ts-seconds
 # Create test record
 test_record = {
     'id': str(uuid.uuid4()),
-    'ts': int(time.time() * 1000),
+    'ts': int(time.time()),  # store seconds since epoch
     'timestamp': int(time.time()),
+# END stonecutter fix: ts-seconds
     'mode': 'test',
     'brand': 'TestBrand',
     'category': 'TestCategory',

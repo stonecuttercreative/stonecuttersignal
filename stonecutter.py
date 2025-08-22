@@ -1161,10 +1161,13 @@ CONTEXT:
                     from src.stonecutter.persistence.jsonl import append_jsonl
                     
                     # Build run record
+                    # BEGIN stonecutter fix: ts-seconds
                     run_record = {
                         'id': str(uuid.uuid4()),
+                        'ts': int(__import__('time').time()),  # store seconds since epoch
                         'timestamp': int(__import__('time').time()),
                         'mode': 'real-time',  # Default mode
+                    # END stonecutter fix: ts-seconds
                         'brand': 'Unknown',   # Would be extracted from brief
                         'category': 'Unknown', # Would be extracted from brief
                         'audience': '',       # Would be extracted from brief
@@ -1401,11 +1404,13 @@ def run_signal_engine(brief, interactive_mode: bool = True) -> Dict[str, Any]:
             audience_val = brief_fields.get('audience', '') if 'brief_fields' in locals() else ''
             channels_val = brief_fields.get('channels', '') if 'brief_fields' in locals() else ''
             
+            # BEGIN stonecutter fix: ts-seconds
             # Build run record with proper structure
             run_record = {
                 'id': str(uuid.uuid4()),
-                'ts': int(time.time() * 1000),  # Use ts field for consistency
+                'ts': int(time.time()),  # store seconds since epoch (not ms)
                 'timestamp': int(time.time()),   # Keep both for compatibility
+            # END stonecutter fix: ts-seconds
                 'mode': brief_fields.get('mode', 'real-time') if 'brief_fields' in locals() else 'real-time',
                 'brand': brand,
                 'category': category,

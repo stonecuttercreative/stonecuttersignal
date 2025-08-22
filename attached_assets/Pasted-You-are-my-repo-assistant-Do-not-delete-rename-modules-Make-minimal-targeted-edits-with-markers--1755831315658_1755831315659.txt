@@ -1,0 +1,101 @@
+You are my repo assistant. Do not delete/rename modules. Make minimal, targeted edits with markers:
+
+# BEGIN stonecutter fix: ts-seconds … # END stonecutter fix: ts-seconds
+
+1) Engine/persistence writer: store seconds, not ms
+
+Open src/stonecutter/engine.py (where the run record is assembled) and ensure we write seconds:
+
+# BEGIN stonecutter fix: ts-seconds
+import time, uuid
+# ...
+run_record["id"] = run_record.get("id") or str(uuid.uuid4())
+run_record["ts"] = int(time.time())  # store seconds since epoch (not ms)
+# END stonecutter fix: ts-seconds
+
+If you also set ts anywhere else (other helper scripts), normalize them the same way.
+
+2) SQLite store: safe timestamp parsing & consistent returns
+
+Open src/stonecutter/persistence/sqlite_store.py and add a small helper + use it in last_runs:
+
+# BEGIN stonecutter fix: ts-seconds
+def _normalize_ts(value):
+    try:
+        v = int(value)
+        # if value looks like milliseconds (13+ digits), convert to seconds
+        if v > 1_000_000_000_000:
+            v = v // 1000
+        return v
+    except Exception:
+        return None
+# END stonecutter fix: ts-seconds
+
+Then update last_runs to return normalized seconds:
+
+# BEGIN stonecutter fix: ts-seconds
+def last_runs(limit=50):
+    conn = init_db(); cur = conn.cursor()
+    cur.execute("""SELECT id, ts, brand, category, audience, channels,
+                          confidence, consensus, diversity
+                   FROM runs ORDER BY ts DESC LIMIT ?""", (limit,))
+    rows = cur.fetchall()
+    return [
+      {"id": r[0],
+       "ts": _normalize_ts(r[1]),
+       "brand": r[2], "category": r[3],
+       "audience": r[4], "channels": r[5],
+       "confidence": r[6], "consensus": r[7], "diversity": r[8]}
+      for r in rows
+    ]
+# END stonecutter fix: ts-seconds
+
+3) Dashboard renderer: don’t explode on bad/None ts
+
+Open src/stonecutter/webapp/app.py and make the index view tolerant:
+
+# BEGIN stonecutter fix: ts-seconds
+from datetime import datetime
+
+def _fmt_ts(ts):
+    if not ts:
+        return ""
+    try:
+        # ts already normalized to seconds; if not, best-effort fix:
+        if ts > 1_000_000_000_000:
+            ts = ts // 1000
+        return datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return str(ts)
+# use _fmt_ts(r['ts']) in the table cell
+# END stonecutter fix: ts-seconds
+
+In your HTML row builder, change the Timestamp cell to:
+
+f"<td>{_fmt_ts(r['ts'])}</td>"
+
+4) Seeder: ensure it writes seconds
+
+Open run_sample.py and change any timestamp writes to seconds if present (some builds don’t write ts here — skip if not used):
+
+# BEGIN stonecutter fix: ts-seconds
+import time
+# if you manually build a record here, ensure:
+ts = int(time.time())
+# END stonecutter fix: ts-seconds
+
+5) (Optional) One‑time cleanup of bad seed data, then reseed
+
+Run these in the shell:
+
+# optional: wipe old DB if it's only seed data
+rm -f stonecutter.db
+
+# reinstall & run
+pip install -e .
+python serve_dashboard.py    # keep running in one tab
+# open a new shell tab:
+python run_sample.py
+python scripts/check_db.py
+curl -s http://localhost:8000/debug
+curl -s http://localhost:8000/runs | jq 'length'
