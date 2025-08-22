@@ -1163,7 +1163,7 @@ CONTEXT:
                     # Build run record
                     run_record = {
                         'id': str(uuid.uuid4()),
-                        'timestamp': int(time.time()),
+                        'timestamp': int(__import__('time').time()),
                         'mode': 'real-time',  # Default mode
                         'brand': 'Unknown',   # Would be extracted from brief
                         'category': 'Unknown', # Would be extracted from brief
@@ -1377,7 +1377,7 @@ def run_signal_engine(brief, interactive_mode: bool = True) -> Dict[str, Any]:
             'sources_successful': sources_successful,
             'signal_scores': signal_scores,
             'signal_story': signal_story,
-            'timestamp': time.time(),
+            'timestamp': __import__('time').time(),
             'status': 'success'
         }
         
@@ -1388,6 +1388,45 @@ def run_signal_engine(brief, interactive_mode: bool = True) -> Dict[str, Any]:
         
         # Validate JSON structure
         validated_results = engine.validate_and_reformat_json(json.dumps(final_results))
+        
+        # BEGIN stonecutter extension: persistence hook for run_signal_engine
+        try:
+            import uuid
+            import time
+            from src.stonecutter.settings import settings
+            if settings.persistence_enabled and PROVIDER_SYSTEM_AVAILABLE:
+                from src.stonecutter.persistence.sqlite_store import save_run
+                from src.stonecutter.persistence.jsonl import append_jsonl
+                
+                # Extract fields from brief_fields if available
+                brand = brief_fields.get('brand', 'Unknown') if 'brief_fields' in locals() else 'Unknown'
+                category = brief_fields.get('category', 'Unknown') if 'brief_fields' in locals() else 'Unknown'
+                audience_val = brief_fields.get('audience', '') if 'brief_fields' in locals() else ''
+                channels_val = brief_fields.get('channels', '') if 'brief_fields' in locals() else ''
+                
+                # Build run record
+                run_record = {
+                    'id': str(uuid.uuid4()),
+                    'timestamp': int(__import__('time').time()),
+                    'mode': brief_fields.get('mode', 'real-time') if 'brief_fields' in locals() else 'real-time',
+                    'brand': brand,
+                    'category': category,
+                    'audience': audience_val,
+                    'channels': channels_val,
+                    'scores': validated_results.get('signal_scores', {}),
+                    'meta': validated_results.get('meta', {}),
+                    'story': validated_results.get('signal_story', '')[:280],
+                    'providers': validated_results.get('providers', [])
+                }
+                
+                # Save to persistence layer
+                save_run(run_record)
+                append_jsonl(settings.jsonl_path, run_record)
+                logger.debug("Saved run to persistence layer")
+        except Exception as e:
+            # Silent fail - continue without persistence if unavailable
+            logger.debug(f"Persistence failed: {e}")
+        # END stonecutter extension
         
         logger.info("Stonecutter Signal analysis completed successfully")
         return validated_results

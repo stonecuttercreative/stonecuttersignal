@@ -1,0 +1,122 @@
+You are my repo assistant. Do not delete or rename existing files. Only add or minimally extend things. Use clear markers:
+
+# BEGIN stonecutter extension: sample seeding … # END stonecutter extension: sample seeding
+
+Goal
+Create a script run_sample.py that:
+	•	Calls the existing Signal engine entrypoint (e.g., run_signal) for 3–5 example briefs,
+	•	Prints each arbitrated result (brand, confidence/consensus/diversity),
+	•	Ensures persistence hooks fire so results appear on the dashboard (SQLite + JSONL),
+	•	Works whether providers are real or in mock fallback.
+
+1) Add run_sample.py at repo root
+
+# BEGIN stonecutter extension: sample seeding
+import asyncio
+import json
+import time
+from pprint import pprint
+
+# Try common imports for the engine entrypoint
+try:
+    from stonecutter.engine import run_signal, build_prompt  # build_prompt optional
+except Exception:
+    from stonecutter import run_signal  # fallback
+
+SAMPLES = [
+    {
+        "brand": "Acme Bank",
+        "category": "Finance",
+        "concept": "Clarity-first crypto education campaign focused on real risks and safe on-ramps.",
+        "mode": "realtime",
+        "audience": "Adults 25-45 seeking stability",
+        "channels": "YouTube, CTV, OOH"
+    },
+    {
+        "brand": "Drift",
+        "category": "Wellness",
+        "concept": "Short social stories about finding calm during market noise.",
+        "mode": "realtime",
+        "audience": "GenZ + Millennials who track markets",
+        # no channels → distribution_fit omitted, note recorded
+    },
+    {
+        "brand": "Volt EV",
+        "category": "Automotive",
+        "concept": "Sustainability hero film with social cutdowns featuring owners’ real experiences.",
+        "mode": "realtime",
+        "audience": "Eco‑conscious professionals",
+        "channels": "Instagram, TikTok, YouTube"
+    },
+    {
+        "brand": "Nimble",
+        "category": "Productivity",
+        "concept": "Launch narrative for an AI meeting assistant that prioritizes privacy and clarity over hype.",
+        "mode": "realtime",
+        # legacy: allow plain string later in run
+    },
+]
+
+async def _run_one(payload):
+    t0 = time.time()
+    out = await run_signal(payload if isinstance(payload, dict) else str(payload))
+    dt = int((time.time() - t0) * 1000)
+    meta = out.get("meta", {}) or {}
+    sig = meta.get("signal_scores", {}) or {}
+    brand = (payload["brand"] if isinstance(payload, dict) and "brand" in payload else "(legacy/plain)")
+    print(f"\n=== {brand} | {dt} ms ===")
+    print(f"confidence={sig.get('confidence')}  consensus={sig.get('consensus')}  diversity={sig.get('diversity')}")
+    # Print a compact view of providers (if surfaced)
+    provs = out.get("providers") or []
+    if provs:
+        print("providers:", ", ".join([p.get("provider") or "?" for p in provs]))
+    # Pretty-print a trimmed result
+    print(json.dumps(out.get("scores", out), ensure_ascii=False)[:400], "...\n")
+    return out
+
+def main():
+    # Also include a legacy/plain brief to check backward compatibility:
+    SAMPLES.append("A plain string brief about a clarity-over-hype crypto PSA.")
+
+    loop = asyncio.get_event_loop()
+    outs = []
+    for s in SAMPLES:
+        outs.append(loop.run_until_complete(_run_one(s)))
+
+    print("\nSeeded runs:", len(outs))
+    print("If persistence is enabled, check the dashboard at http://localhost:8000/ (or Replit preview) and /runs JSON.")
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+# END stonecutter extension: sample seeding
+
+2) (Optional) tiny convenience: README snippet
+
+Append to README.md:
+
+### Seeding the dashboard
+Run:
+```bash
+python run_sample.py
+
+This sends a few example briefs through the full pipeline (providers → arbitration → scoring → persistence).
+Open the dashboard at http://localhost:8000/ (Replit: run python serve_dashboard.py then open the webview).
+
+### 3) How to run (Replit shell)
+
+pip install -e .
+python serve_dashboard.py   # in one tab/pane
+
+open the web preview (you should see the empty table)
+
+in another tab/pane:
+
+python run_sample.py
+
+**Expected:**
+- The dashboard table populates with ~4–5 rows (timestamps + confidence/consensus/diversity).
+- `/runs` JSON shows recent entries.
+- The JSONL file grows (e.g., `data/run_logs.jsonl`) and `stonecutter.db` has new rows.
+
+If anything fails, print the error and continue to the next sample; the script must not crash the session.

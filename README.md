@@ -56,6 +56,17 @@ python serve_dashboard.py
 
 Visit http://localhost:8000 to see the dashboard with recent runs, confidence scores, and provider performance metrics.
 
+### Seeding the Dashboard
+
+Run sample analyses to populate the dashboard with test data:
+
+```bash
+python run_sample.py
+```
+
+This sends several example briefs through the full pipeline (providers → arbitration → scoring → persistence).
+Open the dashboard at http://localhost:8000/ to view the populated results.
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.
