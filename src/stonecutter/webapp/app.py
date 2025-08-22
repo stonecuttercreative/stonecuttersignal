@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse
 from typing import List, Dict, Any
 import datetime
 from ..persistence.sqlite_store import last_runs, get_run_details
+from ..logging_conf import logger
 
 app = FastAPI(title="Stonecutter Signal Dashboard", version="1.0.0")
 
@@ -17,8 +18,10 @@ async def get_runs():
     """Get last 50 runs."""
     try:
         runs = last_runs(limit=50)
+        logger.info(f"[dashboard] API returned {len(runs)} runs")
         return runs
     except Exception as e:
+        logger.error(f"[dashboard] Error fetching runs: {e}")
         raise HTTPException(status_code=500, detail=f"Error fetching runs: {str(e)}")
 
 @app.get("/runs/{run_id}")
@@ -37,6 +40,7 @@ async def dashboard_home():
     """Simple HTML dashboard showing recent runs."""
     try:
         runs = last_runs(limit=20)
+        logger.info(f"[dashboard] HTML dashboard showing {len(runs)} runs")
         
         # Build HTML table
         html_content = """

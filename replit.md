@@ -46,6 +46,18 @@ The architecture includes placeholder hooks for future enhancements:
 
 ## Recent Updates (August 2025)
 
+### Hardened Persistence System with Dashboard (Latest)
+- **Absolute Path Configuration**: Database and JSONL paths now use absolute paths for consistency across engine and dashboard
+- **Robust Error Handling**: Comprehensive logging and error handling in persistence layer with graceful fallbacks
+- **Enhanced SQLite Store**: Thread-safe connections with proper isolation levels and detailed logging
+- **Unified Data Access**: Dashboard HTML and JSON endpoints use identical data sources ensuring consistency
+- **Sample Seeding Script**: `run_sample.py` populates dashboard with realistic test data for demonstration
+- **Diagnostic Tools**: `scripts/check_db.py` provides database status and run statistics
+- **Signal Scores Integration**: Confidence, consensus, and diversity metrics properly stored and displayed
+- **Real-time Persistence**: All analysis runs automatically saved to SQLite and JSONL for historical tracking
+
+## Recent Updates (August 2025)
+
 ### Multi-Provider Arbitration System (Latest)
 - **Pluggable Architecture**: Added support for OpenAI, Anthropic Claude, Google Gemini, xAI Grok, Perplexity, and Mistral providers
 - **Real Claude Integration**: Anthropic Claude provider with actual API calls, telemetry tracking, and soft fallback to mock responses

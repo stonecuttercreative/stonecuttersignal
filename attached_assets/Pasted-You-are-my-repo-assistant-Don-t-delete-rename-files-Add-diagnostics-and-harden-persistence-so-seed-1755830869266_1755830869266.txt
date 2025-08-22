@@ -1,0 +1,117 @@
+You are my repo assistant. Don’t delete/rename files. Add diagnostics and harden persistence so seeded runs always appear.
+
+Goals
+1) Make SQLite/JSONL paths absolute and shared for both engine and dashboard.
+2) Add explicit error logging if saving fails.
+3) Ensure /runs HTML uses the same last_runs() as the JSON endpoint.
+
+Changes
+
+A) settings.py — absolute paths
+- In src/stonecutter/settings.py, normalize db/jsonl paths to absolute:
+  # BEGIN stonecutter extension: persistence paths
+  from pathlib import Path
+  _ROOT = Path(__file__).resolve().parents[2]  # repo root (…/src/stonecutter -> up 2)
+  db_path: str = str((_ROOT / "stonecutter.db").resolve())
+  jsonl_path: str = str((_ROOT / "data" / "run_logs.jsonl").resolve())
+  # END stonecutter extension: persistence paths
+
+B) sqlite_store.py — robust init/save/read + logging
+- In src/stonecutter/persistence/sqlite_store.py:
+  * Use sqlite3.connect(settings.db_path, isolation_level=None, check_same_thread=False)
+  * Create tables if not exist.
+  * Wrap save_run(...) with try/except and log exceptions.
+  * Make last_runs(limit) order by ts DESC LIMIT :limit.
+
+  # BEGIN stonecutter extension: sqlite harden
+  import sqlite3, json, time, uuid, os
+  from ..settings import settings
+  from ..logging_conf import logger
+
+  _CONN = None
+  def init_db():
+      global _CONN
+      if _CONN: return _CONN
+      os.makedirs(os.path.dirname(settings.db_path), exist_ok=True)
+      _CONN = sqlite3.connect(settings.db_path, isolation_level=None, check_same_thread=False)
+      cur = _CONN.cursor()
+      cur.execute("""CREATE TABLE IF NOT EXISTS runs(
+        id TEXT PRIMARY KEY, ts INTEGER, mode TEXT, brand TEXT, category TEXT,
+        audience TEXT, channels TEXT, confidence INTEGER, consensus INTEGER, diversity INTEGER, story TEXT
+      )""")
+      cur.execute("""CREATE TABLE IF NOT EXISTS scores(
+        run_id TEXT, key TEXT, value INTEGER
+      )""")
+      cur.execute("""CREATE TABLE IF NOT EXISTS providers(
+        run_id TEXT, name TEXT, model TEXT, latency_ms INTEGER, is_mock INTEGER
+      )""")
+      return _CONN
+
+  def save_run(rec: dict):
+      try:
+          conn = init_db(); cur = conn.cursor()
+          cur.execute("INSERT OR REPLACE INTO runs VALUES (?,?,?,?,?,?,?,?,?,?,?)", (
+              rec["id"], rec["ts"], rec.get("mode"), rec.get("brand"), rec.get("category"),
+              rec.get("audience"), rec.get("channels"), int(rec["meta"]["signal_scores"]["confidence"]),
+              int(rec["meta"]["signal_scores"]["consensus"]), int(rec["meta"]["signal_scores"]["diversity"]),
+              (rec.get("story") or "")[:280]
+          ))
+          for k,v in rec.get("scores", {}).items():
+              cur.execute("INSERT INTO scores(run_id,key,value) VALUES(?,?,?)", (rec["id"], k, int(v)))
+          for p in rec.get("providers", []):
+              cur.execute("INSERT INTO providers(run_id,name,model,latency_ms,is_mock) VALUES(?,?,?,?,?)", (
+                  rec["id"], p.get("provider"), p.get("model"), p.get("latency_ms") or 0,
+                  1 if (p.get("model") is None) else 0
+              ))
+      except Exception as e:
+          logger.error(f"[persistence] save_run failed: {e}")
+  def last_runs(limit=50):
+      conn = init_db(); cur = conn.cursor()
+      cur.execute("SELECT id, ts, brand, category, audience, channels, confidence, consensus, diversity FROM runs ORDER BY ts DESC LIMIT ?", (limit,))
+      rows = cur.fetchall()
+      return [
+        {"id": r[0], "ts": r[1], "brand": r[2], "category": r[3], "audience": r[4], "channels": r[5],
+         "confidence": r[6], "consensus": r[7], "diversity": r[8]}
+        for r in rows
+      ]
+  # END stonecutter extension: sqlite harden
+
+C) engine.py — ensure we actually call save_run and use absolute paths
+- In src/stonecutter/engine.py, after arbitration + scoring, confirm:
+  * rec["id"] = str(uuid.uuid4()); rec["ts"] = int(time.time()*1000)
+  * if settings.persistence_enabled: sqlite_store.save_run(rec)
+  * wrap in try/except and log errors
+
+  # BEGIN stonecutter extension: persist call guard
+  from .persistence import sqlite_store, jsonl
+  import uuid, time
+  try:
+      run_record = {... existing assembled dict ...}
+      if settings.persistence_enabled:
+          sqlite_store.save_run(run_record)
+          jsonl.append_jsonl(settings.jsonl_path, run_record)
+  except Exception as e:
+      logger.error(f"[engine] persistence failed: {e}")
+  # END stonecutter extension: persist call guard
+
+D) webapp/app.py — use the same last_runs() for both HTML and JSON
+- Ensure GET /runs returns sqlite_store.last_runs()
+- Ensure the table on "/" uses that exact list (no separate in-memory cache).
+- Add logging of row count to server logs.
+
+E) tiny diagnostic script
+- Add scripts/check_db.py at repo root to print quick stats:
+
+  # BEGIN stonecutter extension: check_db
+  from stonecutter.persistence.sqlite_store import last_runs, init_db
+  init_db()
+  rows = last_runs(10)
+  print("Rows:", len(rows))
+  for r in rows: print(r["id"], r["brand"], r["confidence"], r["consensus"], r["diversity"])
+  # END stonecutter extension: check_db
+
+Run after seeding:
+pip install -e .
+python run_sample.py
+python scripts/check_db.py
+curl -s http://localhost:8000/runs | jq 'length'

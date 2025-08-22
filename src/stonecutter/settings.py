@@ -41,11 +41,23 @@ class Settings(BaseSettings):
     enable_grok: bool = True
     # END stonecutter extension: grok
 
-    # BEGIN stonecutter extension: persistence settings
+    # BEGIN stonecutter extension: persistence paths
     persistence_enabled: bool = True
-    db_path: str = "stonecutter.db"
-    jsonl_path: str = "data/run_logs.jsonl"
-    # END stonecutter extension
+    
+    @property
+    def db_path(self) -> str:
+        """Get absolute path to SQLite database."""
+        from pathlib import Path
+        _ROOT = Path(__file__).resolve().parents[2]
+        return str((_ROOT / "stonecutter.db").resolve())
+    
+    @property  
+    def jsonl_path(self) -> str:
+        """Get absolute path to JSONL log file."""
+        from pathlib import Path
+        _ROOT = Path(__file__).resolve().parents[2]
+        return str((_ROOT / "data" / "run_logs.jsonl").resolve())
+    # END stonecutter extension: persistence paths
 
     # Enable or disable each provider
     enable_openai: bool = True

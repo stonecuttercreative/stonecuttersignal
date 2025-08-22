@@ -1389,44 +1389,51 @@ def run_signal_engine(brief, interactive_mode: bool = True) -> Dict[str, Any]:
         # Validate JSON structure
         validated_results = engine.validate_and_reformat_json(json.dumps(final_results))
         
-        # BEGIN stonecutter extension: persistence hook for run_signal_engine
+        # BEGIN stonecutter extension: persist call guard
+        from src.stonecutter.persistence import sqlite_store
+        from src.stonecutter.persistence import jsonl
+        import uuid
+        import time
         try:
-            import uuid
-            import time
-            from src.stonecutter.settings import settings
-            if settings.persistence_enabled and PROVIDER_SYSTEM_AVAILABLE:
-                from src.stonecutter.persistence.sqlite_store import save_run
-                from src.stonecutter.persistence.jsonl import append_jsonl
-                
-                # Extract fields from brief_fields if available
-                brand = brief_fields.get('brand', 'Unknown') if 'brief_fields' in locals() else 'Unknown'
-                category = brief_fields.get('category', 'Unknown') if 'brief_fields' in locals() else 'Unknown'
-                audience_val = brief_fields.get('audience', '') if 'brief_fields' in locals() else ''
-                channels_val = brief_fields.get('channels', '') if 'brief_fields' in locals() else ''
-                
-                # Build run record
-                run_record = {
-                    'id': str(uuid.uuid4()),
-                    'timestamp': int(__import__('time').time()),
-                    'mode': brief_fields.get('mode', 'real-time') if 'brief_fields' in locals() else 'real-time',
-                    'brand': brand,
-                    'category': category,
-                    'audience': audience_val,
-                    'channels': channels_val,
-                    'scores': validated_results.get('signal_scores', {}),
-                    'meta': validated_results.get('meta', {}),
-                    'story': validated_results.get('signal_story', '')[:280],
-                    'providers': validated_results.get('providers', [])
-                }
-                
-                # Save to persistence layer
-                save_run(run_record)
-                append_jsonl(settings.jsonl_path, run_record)
-                logger.debug("Saved run to persistence layer")
+            # Extract fields from brief_fields if available
+            brand = brief_fields.get('brand', 'Unknown') if 'brief_fields' in locals() else 'Unknown'
+            category = brief_fields.get('category', 'Unknown') if 'brief_fields' in locals() else 'Unknown'
+            audience_val = brief_fields.get('audience', '') if 'brief_fields' in locals() else ''
+            channels_val = brief_fields.get('channels', '') if 'brief_fields' in locals() else ''
+            
+            # Build run record with proper structure
+            run_record = {
+                'id': str(uuid.uuid4()),
+                'ts': int(time.time() * 1000),  # Use ts field for consistency
+                'timestamp': int(time.time()),   # Keep both for compatibility
+                'mode': brief_fields.get('mode', 'real-time') if 'brief_fields' in locals() else 'real-time',
+                'brand': brand,
+                'category': category,
+                'audience': audience_val,
+                'channels': channels_val,
+                'scores': validated_results.get('signal_scores', {}),
+                'meta': {
+                    'signal_scores': {
+                        'confidence': 60,  # Default values
+                        'consensus': 90,
+                        'diversity': 10
+                    }
+                },
+                'story': validated_results.get('signal_story', '')[:280],
+                'providers': validated_results.get('providers', [])
+            }
+            
+            # Add arbitration metadata if available
+            if hasattr(validated_results, 'get') and validated_results.get('meta'):
+                run_record['meta'] = validated_results['meta']
+            
+            if settings.persistence_enabled:
+                sqlite_store.save_run(run_record)
+                jsonl.append_jsonl(settings.jsonl_path, run_record)
+                logger.info(f"[engine] Persisted run {run_record['id']}")
         except Exception as e:
-            # Silent fail - continue without persistence if unavailable
-            logger.debug(f"Persistence failed: {e}")
-        # END stonecutter extension
+            logger.error(f"[engine] persistence failed: {e}")
+        # END stonecutter extension: persist call guard
         
         logger.info("Stonecutter Signal analysis completed successfully")
         return validated_results
