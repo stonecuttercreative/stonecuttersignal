@@ -1,0 +1,114 @@
+You are my repo assistant. Do not delete or rename existing files. Only add or minimally extend files, with clear markers:
+
+# BEGIN stonecutter extension: grok … # END stonecutter extension
+
+Goal
+Add a Grok provider into the multi‑LLM panel. If XAI_API_KEY is missing, return a deterministic mock so runs never fail. Tag outputs with telemetry (latency, model). Register in the panel + keep all tests green.
+
+1) Settings
+
+Open src/stonecutter/settings.py and ensure Grok fields exist:
+
+# BEGIN stonecutter extension: grok
+from pydantic import Field
+
+class Settings(BaseSettings):
+    # ...
+    xai_api_key: str | None = Field(default=None, env="XAI_API_KEY")  # Grok
+    grok_model: str = "grok-2-1212"  # placeholder; adjust when live
+    enable_grok: bool = True
+# END stonecutter extension: grok
+
+2) Provider implementation (stub with soft fallback)
+
+Create or update src/stonecutter/providers/grok_llm.py:
+
+# BEGIN stonecutter extension: grok provider
+from typing import Dict, Any
+import time, asyncio
+from ..settings import settings
+from ._mock_util import mock_complete
+
+class GrokProvider:
+    name = "grok"
+
+    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        # Until xAI endpoint is wired, or if key is absent, use safe mock
+        start = time.time()
+        if not settings.enable_grok or not settings.xai_api_key:
+            data = await mock_complete(self.name, prompt)
+        else:
+            # Placeholder: keep mock for now to avoid hard dependency.
+            # Swap this block to a real httpx call when flipping live.
+            data = await mock_complete(self.name, prompt)
+
+        data.setdefault("_telemetry", {})
+        data["_telemetry"].update({
+            "provider": self.name,
+            "latency_ms": int((time.time() - start) * 1000),
+            "model": settings.grok_model,
+            "input_tokens": None,
+            "output_tokens": None,
+        })
+        return data
+# END stonecutter extension: grok provider
+
+3) Registry
+
+Open src/stonecutter/providers/registry.py and ensure Grok is included:
+
+# BEGIN stonecutter extension: grok registry
+from .grok_llm import GrokProvider
+
+def load_panel():
+    panel = []
+    # (keep the others as they are)
+    if settings.enable_grok: panel.append(GrokProvider())
+    return panel
+# END stonecutter extension: grok registry
+
+4) Engine (provider tagging)
+
+In src/stonecutter/engine.py, confirm each provider’s result gets tagged (keep existing code; otherwise add):
+
+# BEGIN stonecutter extension: provider tag
+out = await m.complete(prompt)
+out["_provider_name"] = getattr(m, "name", "unknown")
+# END stonecutter extension
+
+5) Tests
+
+Update test_providers.py to assert Grok loads:
+
+# BEGIN stonecutter extension: grok test
+from stonecutter.providers.registry import load_panel
+names = [getattr(p, "name", "unknown") for p in load_panel()]
+assert "grok" in names, f"grok not in providers: {names}"
+print("Providers present:", names)
+# END stonecutter extension: grok test
+
+Your existing compare_ab.py should now list a grok row in provider contributions; telemetry should show model: grok-2-1212 and latency.
+
+6) Docs
+
+Append to README/replit.md:
+
+### Grok (xAI)
+- Set `XAI_API_KEY` in Replit Secrets to flip Grok live later.
+- Until then, provider returns deterministic mock responses with telemetry.
+- Model name defaults to `grok-2-1212` (change in settings).
+
+7) Run checks
+
+pip install -e .
+python test_providers.py
+python quick_check.py
+python compare_ab.py
+
+Expected:
+	•	test_providers.py lists grok among providers.
+	•	quick_check.py still passes all three tests.
+	•	compare_ab.py shows a grok row with telemetry (mock until you add the key).
+
+Finally print:
+Grok provider added with soft fallback and telemetry; arbitration intact.

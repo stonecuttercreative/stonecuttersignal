@@ -34,6 +34,11 @@ Default model: `gemini-1.5-pro` (change in settings if needed).
 Set `PERPLEXITY_API_KEY` in Replit Secrets. If unset, the provider falls back to a mock so runs never fail.
 Default model: `llama-3.1-sonar-large-32k-online` (change in settings).
 
+### Grok (xAI)
+Set `XAI_API_KEY` in Replit Secrets to flip Grok live later.
+Until then, provider returns deterministic mock responses with telemetry.
+Model name defaults to `grok-2-1212` (change in settings).
+
 ### Testing Commands
 ```bash
 python quick_check.py    # Validation tests

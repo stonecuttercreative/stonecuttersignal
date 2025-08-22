@@ -51,6 +51,7 @@ The architecture includes placeholder hooks for future enhancements:
 - **Real Claude Integration**: Anthropic Claude provider with actual API calls, telemetry tracking, and soft fallback to mock responses
 - **Real Gemini Integration**: Google Gemini provider with actual API calls, telemetry tracking, and soft fallback to mock responses
 - **Real Perplexity Integration**: Perplexity provider with actual API calls using httpx, telemetry tracking, and soft fallback to mock responses
+- **Grok Provider**: xAI Grok provider with telemetry and soft fallback (ready for real API when live)
 - **Soft Fallbacks**: When API keys are missing, providers automatically use mock responses so runs never fail
 - **Weighted Arbitration**: Provider responses are combined using configurable weights and confidence scoring from cross-model agreement
 - **Telemetry System**: Tracks latency, model information, and token usage per provider for performance monitoring

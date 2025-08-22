@@ -67,3 +67,11 @@ async def demo_provider_system():
 
 if __name__ == "__main__":
     asyncio.run(demo_provider_system())
+    
+    # BEGIN stonecutter extension: grok test
+    from src.stonecutter.providers.registry import load_panel
+    from src.stonecutter.settings import settings
+    names = [getattr(p, "name", "unknown") for p in load_panel()]
+    assert "grok" in names, f"grok not in providers: {names}"
+    print("✅ Grok provider found in panel")
+    # END stonecutter extension: grok test

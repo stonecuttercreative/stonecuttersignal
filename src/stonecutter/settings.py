@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     perplexity_model: str = "llama-3.1-sonar-large-32k-online"  # adjust if needed
     # END stonecutter extension
 
+    # BEGIN stonecutter extension: grok
+    grok_model: str = "grok-2-1212"  # placeholder; adjust when live
+    enable_grok: bool = True
+    # END stonecutter extension: grok
+
     # Enable or disable each provider
     enable_openai: bool = True
     enable_claude: bool = True
