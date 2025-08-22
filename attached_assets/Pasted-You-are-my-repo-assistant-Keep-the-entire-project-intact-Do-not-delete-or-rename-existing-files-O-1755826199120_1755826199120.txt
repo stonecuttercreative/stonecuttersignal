@@ -1,0 +1,375 @@
+You are my repo assistant. Keep the entire project intact. Do not delete or rename existing files. Only add files or minimally extend existing ones. Maintain current behavior for all existing calls. If something already exists, append or adapt with clear comments:
+
+# BEGIN stonecutter extension
+# END stonecutter extension
+
+Goal
+Add provider stubs for OpenAI, Anthropic Claude, Google Gemini, xAI Grok, Perplexity, and Mistral alongside the existing code. Make them pluggable via config. If an API key is missing, the provider should soft‑fallback to a mock so runs never fail. Upgrade the arbitration panel to handle provider weights and confidence from cross‑model agreement.
+
+Tasks
+
+1) Settings: add provider toggles and weights
+Create or extend src/stonecutter/settings.py with:
+
+# BEGIN stonecutter extension
+from pydantic import BaseSettings, Field
+
+class Settings(BaseSettings):
+    mode: str = "realtime"
+    max_concurrency: int = 8
+    request_timeout_s: int = 20
+    cache_enabled: bool = True
+
+    # Feature flags
+    feature_reddit_off: bool = True
+    feature_tiktok_off: bool = True
+
+    # Provider keys (optional)
+    openai_api_key: str | None = Field(default=None, env="OPENAI_API_KEY")
+    anthropic_api_key: str | None = Field(default=None, env="ANTHROPIC_API_KEY")
+    google_genai_key: str | None = Field(default=None, env="GOOGLE_GENAI_API_KEY")
+    xai_api_key: str | None = Field(default=None, env="XAI_API_KEY")  # Grok
+    perplexity_api_key: str | None = Field(default=None, env="PERPLEXITY_API_KEY")
+    mistral_api_key: str | None = Field(default=None, env="MISTRAL_API_KEY")
+
+    # Enable or disable each provider
+    enable_openai: bool = True
+    enable_claude: bool = True
+    enable_gemini: bool = True
+    enable_grok: bool = True
+    enable_perplexity: bool = True
+    enable_mistral: bool = True
+
+    # Provider weights for arbitration
+    weight_openai: float = 1.0
+    weight_claude: float = 1.2
+    weight_gemini: float = 1.1
+    weight_grok: float = 1.0
+    weight_perplexity: float = 1.1
+    weight_mistral: float = 0.9
+
+settings = Settings()
+# END stonecutter extension
+
+2) Provider interface
+Create src/stonecutter/providers/base.py:
+
+# BEGIN stonecutter extension
+from typing import Protocol, Dict, Any
+
+class LLMProvider(Protocol):
+    name: str
+    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        """
+        Return JSON-like dict:
+        {
+          "cluster": str,
+          "archetype": str,
+          "story": str,
+          "scores": {
+            "cultural_fit": int, "clarity": int, "emotional_resonance": int,
+            "differentiation": int, "conversation_fit": int,
+            # optional
+            "distribution_fit": int
+          },
+          "claims": [str, str, str]
+        }
+        """
+        ...
+# END stonecutter extension
+
+3) Shared mock fallback
+Create src/stonecutter/providers/_mock_util.py:
+
+# BEGIN stonecutter extension
+import asyncio, random
+from typing import Dict, Any
+
+def _clip(x: int) -> int:
+    return max(0, min(100, int(x)))
+
+async def mock_complete(name: str, prompt: str) -> Dict[str, Any]:
+    r = random.Random(hash(name + str(len(prompt))) & 0xffffffff)
+    base = len(prompt) % 23
+    jitter = r.randint(0, 6)
+    await asyncio.sleep(0.02 + 0.01*jitter)
+    scores = {
+        "cultural_fit": _clip(70 + base - jitter),
+        "clarity": _clip(65 + base),
+        "emotional_resonance": _clip(68 + base + jitter),
+        "differentiation": _clip(60 + base//2),
+        "conversation_fit": _clip(64 + base - jitter//2),
+    }
+    if "Channels:" in prompt and "N/A" not in prompt:
+        scores["distribution_fit"] = _clip(66 + base//2)
+    return {
+        "cluster": "General Clarity",
+        "archetype": "Guide",
+        "story": "Clear, grounded guidance with practical framing and minimal hype.",
+        "scores": scores,
+        "claims": ["Clarity over hype", "Grounded in lived context", "No specific coin promises"],
+    }
+# END stonecutter extension
+
+4) Providers: create or extend the following files. Each should try the real API if a key is present, else call mock_complete so runs never break.
+
+4a) OpenAI
+Create src/stonecutter/providers/openai_llm.py:
+
+# BEGIN stonecutter extension
+import os, json, asyncio
+from typing import Dict, Any
+from ._mock_util import mock_complete
+from ..settings import settings
+
+class OpenAIProvider:
+    name = "openai"
+
+    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        if not settings.openai_api_key or not settings.enable_openai:
+            return await mock_complete(self.name, prompt)
+        # Minimal placeholder: call mock path for now to avoid SDK pinning.
+        # Swap to real OpenAI client in a later step.
+        return await mock_complete(self.name, prompt)
+# END stonecutter extension
+
+4b) Anthropic Claude
+Create src/stonecutter/providers/anthropic_llm.py:
+
+# BEGIN stonecutter extension
+from typing import Dict, Any
+from ._mock_util import mock_complete
+from ..settings import settings
+
+class ClaudeProvider:
+    name = "claude"
+
+    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        if not settings.anthropic_api_key or not settings.enable_claude:
+            return await mock_complete(self.name, prompt)
+        return await mock_complete(self.name, prompt)
+# END stonecutter extension
+
+4c) Google Gemini
+Create src/stonecutter/providers/gemini_llm.py:
+
+# BEGIN stonecutter extension
+from typing import Dict, Any
+from ._mock_util import mock_complete
+from ..settings import settings
+
+class GeminiProvider:
+    name = "gemini"
+
+    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        if not settings.google_genai_key or not settings.enable_gemini:
+            return await mock_complete(self.name, prompt)
+        return await mock_complete(self.name, prompt)
+# END stonecutter extension
+
+4d) xAI Grok
+Create src/stonecutter/providers/grok_llm.py:
+
+# BEGIN stonecutter extension
+from typing import Dict, Any
+from ._mock_util import mock_complete
+from ..settings import settings
+
+class GrokProvider:
+    name = "grok"
+
+    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        if not settings.xai_api_key or not settings.enable_grok:
+            return await mock_complete(self.name, prompt)
+        return await mock_complete(self.name, prompt)
+# END stonecutter extension
+
+4e) Perplexity
+Create src/stonecutter/providers/perplexity_llm.py:
+
+# BEGIN stonecutter extension
+from typing import Dict, Any
+from ._mock_util import mock_complete
+from ..settings import settings
+
+class PerplexityProvider:
+    name = "perplexity"
+
+    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        if not settings.perplexity_api_key or not settings.enable_perplexity:
+            return await mock_complete(self.name, prompt)
+        return await mock_complete(self.name, prompt)
+# END stonecutter extension
+
+4f) Mistral
+Create src/stonecutter/providers/mistral_llm.py:
+
+# BEGIN stonecutter extension
+from typing import Dict, Any
+from ._mock_util import mock_complete
+from ..settings import settings
+
+class MistralProvider:
+    name = "mistral"
+
+    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        if not settings.mistral_api_key or not settings.enable_mistral:
+            return await mock_complete(self.name, prompt)
+        return await mock_complete(self.name, prompt)
+# END stonecutter extension
+
+5) Provider registry and panel selection
+Create src/stonecutter/providers/registry.py:
+
+# BEGIN stonecutter extension
+from typing import List
+from .base import LLMProvider
+from .openai_llm import OpenAIProvider
+from .anthropic_llm import ClaudeProvider
+from .gemini_llm import GeminiProvider
+from .grok_llm import GrokProvider
+from .perplexity_llm import PerplexityProvider
+from .mistral_llm import MistralProvider
+from ..settings import settings
+
+def load_panel() -> List[LLMProvider]:
+    """Return a list of enabled providers. If a provider lacks a key, it still loads but will mock."""
+    panel: List[LLMProvider] = []
+    if settings.enable_openai: panel.append(OpenAIProvider())
+    if settings.enable_claude: panel.append(ClaudeProvider())
+    if settings.enable_gemini: panel.append(GeminiProvider())
+    if settings.enable_grok: panel.append(GrokProvider())
+    if settings.enable_perplexity: panel.append(PerplexityProvider())
+    if settings.enable_mistral: panel.append(MistralProvider())
+    return panel
+# END stonecutter extension
+
+6) Arbitration upgrade: weights and agreement
+Create or extend src/stonecutter/arbitration/core.py with:
+
+# BEGIN stonecutter extension
+from statistics import median
+from typing import List, Dict, Any
+from ..settings import settings
+
+def _weighted_median(items: List[tuple[int, float]]) -> int:
+    if not items:
+        return 0
+    # simple median ignoring weights for now to keep deterministic
+    vals = [v for v,_w in items]
+    vals.sort()
+    mid = len(vals)//2
+    return int(vals[mid]) if len(vals) % 2 == 1 else int((vals[mid-1] + vals[mid]) / 2)
+
+def _provider_weight(name: str) -> float:
+    return {
+        "openai": settings.weight_openai,
+        "claude": settings.weight_claude,
+        "gemini": settings.weight_gemini,
+        "grok": settings.weight_grok,
+        "perplexity": settings.weight_perplexity,
+        "mistral": settings.weight_mistral,
+    }.get(name, 1.0)
+
+def arbitrate(responses: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if not responses:
+        raise ValueError("No responses to arbitrate")
+
+    cluster = responses[0].get("cluster", "General Clarity")
+    archetype = responses[0].get("archetype", "Guide")
+
+    # collect per-score arrays with weights
+    buckets: Dict[str, List[tuple[int, float]]] = {}
+    all_claims: List[str] = []
+    for r in responses:
+        w = _provider_weight(r.get("_provider_name","unknown"))
+        for k, v in r.get("scores", {}).items():
+            buckets.setdefault(k, []).append((int(v), w))
+        all_claims.extend(r.get("claims", []))
+
+    final_scores = {k: _weighted_median(vw) for k, vw in buckets.items()}
+
+    # simple agreement-based confidence
+    # compute average absolute deviation from median across keys
+    deviations = []
+    for k, vw in buckets.items():
+        med = final_scores[k]
+        for v, _w in vw:
+            deviations.append(abs(v - med))
+    avg_dev = sum(deviations)/max(1, len(deviations))
+    confidence = max(0.5, min(0.99, 1.0 - (avg_dev / 100.0)))
+
+    contradictions = [c for c in all_claims if str(c).strip().upper().startswith("NOT:")]
+
+    return {
+        "cluster": cluster,
+        "archetype": archetype,
+        "scores": final_scores,
+        "contradictions": contradictions,
+        "confidence": round(confidence, 2),
+        "story": responses[0].get("story",""),
+    }
+# END stonecutter extension
+
+7) Engine: run all enabled providers in parallel and tag each response with its provider name before arbitration
+Create or extend src/stonecutter/engine.py. Add a helper to build the panel and run:
+
+# BEGIN stonecutter extension
+import asyncio
+from typing import Dict, Any, List
+from .providers.registry import load_panel
+from .arbitration.core import arbitrate
+from .logging_conf import logger
+
+async def _run_panel(prompt: str) -> List[Dict[str, Any]]:
+    panel = load_panel()
+    async def call(m):
+        try:
+            out = await m.complete(prompt)
+            out["_provider_name"] = getattr(m, "name", "unknown")
+            return out
+        except Exception as e:
+            logger.warning(f"Provider failed: {getattr(m,'name','unknown')} -> {e}")
+            return {"_provider_name": getattr(m,"name","unknown"),
+                    "cluster":"General Clarity","archetype":"Guide","story":"",
+                    "scores":{"cultural_fit":50,"clarity":50,"emotional_resonance":50,
+                              "differentiation":50,"conversation_fit":50},
+                    "claims":["Provider error fallback"]}
+    tasks = [call(m) for m in panel]
+    return await asyncio.gather(*tasks)
+
+# in your existing run_signal flow, replace the old panel call with:
+# panel_out = await _run_panel(prompt)
+# arb = arbitrate(panel_out)
+# END stonecutter extension
+
+Do not remove your existing mocks. If your engine already had a panel, adapt the call to use _run_panel while keeping old behavior as a fallback.
+
+8) Prompt integrity
+If you have a Jinja prompt at src/stonecutter/prompts/diagnostic.jinja ensure it includes:
+- Audience and Channels lines
+- Distribution Fit is only requested when channels are present
+
+If inline prompts are used, inject these variables with minimal edits and comments.
+
+9) Export a stable entrypoint
+If not present, export run_signal from src/stonecutter/__init__.py so quick_check can import it:
+
+# BEGIN stonecutter extension
+try:
+    from .engine import run_signal  # type: ignore
+except Exception:
+    pass
+# END stonecutter extension
+
+10) Smoke test
+Do not modify quick_check.py if it already exists and passes. After changes, run:
+python quick_check.py
+
+Expected
+- All three checks pass as before
+- No runtime errors even if no API keys are set
+- Providers list is visible in logs and each missing key falls back to the mock path
+
+Finally, print:
+"Multi-LLM panel ready with OpenAI, Claude, Gemini, Grok, Perplexity, Mistral (mock fallback enabled)."

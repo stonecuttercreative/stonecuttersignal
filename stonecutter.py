@@ -9,9 +9,23 @@ import json
 import os
 import time
 import logging
+import asyncio
 from typing import Dict, List, Any, Optional, Tuple
 from openai import OpenAI
 import requests
+
+# BEGIN stonecutter extension
+# Import the new provider arbitration system
+try:
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+    from src.stonecutter.providers.registry import load_panel
+    from src.stonecutter.arbitration.core import arbitrate
+    PROVIDER_SYSTEM_AVAILABLE = True
+except ImportError:
+    PROVIDER_SYSTEM_AVAILABLE = False
+    logger.warning("Provider system not available, using fallback mode")
+# END stonecutter extension
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -29,6 +43,11 @@ class StonecutterSignal:
     def __init__(self):
         self.max_retries = 1
         self.retry_delay = 2
+        
+        # BEGIN stonecutter extension
+        # Initialize the provider arbitration system
+        self.provider_system_enabled = PROVIDER_SYSTEM_AVAILABLE
+        # END stonecutter extension
     
     def parse_brief_fields(self, brief: str) -> Dict[str, str]:
         """
@@ -1069,6 +1088,112 @@ CONTEXT:
         """Future hook for cultural archetype reframing."""
         logger.info("Future hook: Cultural archetype reframing")
         pass
+
+    # BEGIN stonecutter extension
+    async def _run_provider_panel(self, prompt: str) -> List[Dict[str, Any]]:
+        """Run the multi-provider panel and return responses for arbitration."""
+        if not self.provider_system_enabled:
+            return []
+        
+        panel = load_panel()
+        async def call_provider(provider):
+            try:
+                out = await provider.complete(prompt)
+                out["_provider_name"] = getattr(provider, "name", "unknown")
+                return out
+            except Exception as e:
+                logger.warning(f"Provider failed: {getattr(provider,'name','unknown')} -> {e}")
+                return {"_provider_name": getattr(provider,"name","unknown"),
+                        "cluster":"General Clarity","archetype":"Guide","story":"",
+                        "scores":{"cultural_fit":50,"clarity":50,"emotional_resonance":50,
+                                  "differentiation":50,"conversation_fit":50},
+                        "claims":["Provider error fallback"]}
+        
+        tasks = [call_provider(provider) for provider in panel]
+        return await asyncio.gather(*tasks)
+
+    def get_arbitrated_analysis(self, prompt: str, channels: str = None) -> Dict[str, Any]:
+        """Get analysis from multiple providers and arbitrate the results."""
+        if not self.provider_system_enabled:
+            # Fallback to existing OpenAI-only implementation
+            return self._fallback_openai_analysis(prompt, channels)
+        
+        try:
+            # Run async provider panel
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            responses = loop.run_until_complete(self._run_provider_panel(prompt))
+            loop.close()
+            
+            if not responses:
+                return self._fallback_openai_analysis(prompt, channels)
+            
+            # Arbitrate the responses
+            arbitrated = arbitrate(responses)
+            
+            # Add distribution_fit note if channels not provided
+            if not channels:
+                if 'notes' not in arbitrated:
+                    arbitrated['notes'] = {}
+                arbitrated['notes']['distribution_fit'] = "Distribution Fit not evaluated (channels not provided)"
+            
+            return arbitrated
+            
+        except Exception as e:
+            logger.error(f"Provider panel failed: {e}")
+            return self._fallback_openai_analysis(prompt, channels)
+
+    def _fallback_openai_analysis(self, prompt: str, channels: str = None) -> Dict[str, Any]:
+        """Fallback OpenAI-only analysis when provider system unavailable."""
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "system", 
+                        "content": "You are a marketing analysis expert. Analyze the campaign and provide scores and insights."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            
+            # Ensure consistent structure
+            if 'scores' not in result:
+                result['scores'] = {
+                    "cultural_fit": 70,
+                    "clarity": 65,
+                    "emotional_resonance": 68,
+                    "differentiation": 60,
+                    "conversation_fit": 64
+                }
+            
+            # Add distribution_fit note if channels not provided
+            if not channels:
+                if 'notes' not in result:
+                    result['notes'] = {}
+                result['notes']['distribution_fit'] = "Distribution Fit not evaluated (channels not provided)"
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Fallback analysis failed: {e}")
+            return {
+                "cluster": "General Clarity",
+                "archetype": "Guide", 
+                "scores": {
+                    "cultural_fit": 50,
+                    "clarity": 50,
+                    "emotional_resonance": 50,
+                    "differentiation": 50,
+                    "conversation_fit": 50
+                },
+                "notes": {"distribution_fit": "Distribution Fit not evaluated (channels not provided)"} if not channels else {},
+                "story": "Analysis unavailable due to system error."
+            }
+    # END stonecutter extension
 
 
 def run_signal_engine(brief, interactive_mode: bool = True) -> Dict[str, Any]:

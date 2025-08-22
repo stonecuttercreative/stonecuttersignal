@@ -33,17 +33,27 @@ The system implements a robust error handling pattern for all external calls:
 4. JSON validation with LLM-based reformatting for malformed responses
 
 ### Hybrid AI Architecture
-The design separates concerns between external AI reasoning (OpenAI GPT-4o) and internal business logic. OpenAI handles analysis, classification, and content generation while Python manages workflow orchestration, data integration, and error handling.
+The design separates concerns between external AI reasoning and internal business logic. The system now supports multiple LLM providers (OpenAI, Claude, Gemini, Grok, Perplexity, Mistral) with automatic arbitration of responses. Python manages workflow orchestration, data integration, provider coordination, and error handling. When multiple providers are available, their responses are weighted and combined for improved reliability and consensus scoring.
 
 ### Extensibility Framework
 The architecture includes placeholder hooks for future enhancements:
 - Owned data ingestion capabilities
 - Multi-concept scenario analysis
 - Cultural archetype reframing functionality
+- Real API integration for providers (currently using mock responses with deterministic scoring)
+- Custom provider weight optimization based on historical performance
+- Advanced consensus algorithms beyond simple weighted medians
 
 ## Recent Updates (August 2025)
 
-### Platform_Fit to Conversation_Fit Migration (Latest)
+### Multi-Provider Arbitration System (Latest)
+- **Pluggable Architecture**: Added support for OpenAI, Anthropic Claude, Google Gemini, xAI Grok, Perplexity, and Mistral providers
+- **Soft Fallbacks**: When API keys are missing, providers automatically use mock responses so runs never fail
+- **Weighted Arbitration**: Provider responses are combined using configurable weights and confidence scoring from cross-model agreement
+- **Backward Compatibility**: All existing functionality preserved with seamless fallback to OpenAI-only mode when provider system unavailable
+- **Configuration System**: Comprehensive settings with feature flags, provider toggles, and weight configurations via environment variables
+
+### Platform_Fit to Conversation_Fit Migration
 - **Legacy Support**: Automatic mapping of legacy "platform_fit" scores to "conversation_fit"  
 - **Structured Notes**: Distribution_fit notes moved to proper "notes" object structure
 - **Audience Integration**: Target audience information now displayed in final output when provided
