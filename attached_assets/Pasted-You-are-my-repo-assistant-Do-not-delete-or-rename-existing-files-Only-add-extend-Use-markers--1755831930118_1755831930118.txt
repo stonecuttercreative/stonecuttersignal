@@ -1,0 +1,186 @@
+You are my repo assistant. Do not delete or rename existing files. Only add/extend. Use markers:
+
+# BEGIN stonecutter extension: visuals … # END stonecutter extension: visuals
+
+Goal
+
+Extend the FastAPI/HTML dashboard with six charts, each backed by small REST endpoints. Keep the current table. Add <hr> and <h3> blocks for clarity.
+
+1) Charts to support
+	1.	Time-Series Line Chart
+Confidence, Consensus, Diversity over last 50 runs.
+(already drafted, refine)
+	2.	Provider Latency Bar Chart
+Avg latency per provider in latest run.
+(already drafted, refine)
+	3.	Provider Participation Pie/Doughnut
+Show ratio of mock vs real responses per provider in latest run.
+	4.	Distribution Histogram
+Score distribution (Confidence/Consensus/Diversity) across last N runs.
+e.g., how many fell in 0-20, 20-40, etc.
+	5.	Radar Chart (Per-Run Composite)
+For the latest run: plot Confidence, Consensus, Diversity on a radar/spider chart.
+	6.	Trend Heatmap (Calendar)
+Show number of runs per day for last 30 days, shaded by count. (Simple: grid of days colored by count.)
+
+⸻
+
+2) Backend endpoints
+
+Extend app.py:
+
+# BEGIN stonecutter extension: visuals
+@app.get("/metrics/distribution")
+def metrics_distribution(bins:int=5, limit:int=200):
+    """Histogram counts for confidence/consensus/diversity."""
+    rows = last_runs(limit)
+    out = {"confidence":[],"consensus":[],"diversity":[]}
+    def bucket(vals):
+        if not vals: return []
+        step = 100//bins
+        buckets = [0]*bins
+        for v in vals:
+            if v is None: continue
+            i = min(v//step, bins-1)
+            buckets[i]+=1
+        return buckets
+    out["confidence"] = bucket([r.get("confidence",0) for r in rows])
+    out["consensus"] = bucket([r.get("consensus",0) for r in rows])
+    out["diversity"] = bucket([r.get("diversity",0) for r in rows])
+    return out
+
+@app.get("/metrics/latest")
+def metrics_latest():
+    """Return latest run for radar chart."""
+    rows = last_runs(1)
+    if not rows: return {}
+    r = rows[0]
+    return {"confidence": r.get("confidence"),
+            "consensus": r.get("consensus"),
+            "diversity": r.get("diversity")}
+
+@app.get("/metrics/activity")
+def metrics_activity(days:int=30):
+    """Count runs per day for heatmap."""
+    from collections import Counter
+    import datetime
+    rows = last_runs(1000)
+    ctr=Counter()
+    for r in rows:
+        ts=r.get("ts")
+        if ts:
+            d=datetime.date.fromtimestamp(int(ts))
+            ctr[d]+=1
+    out=[]
+    today=datetime.date.today()
+    for i in range(days):
+        day=today-datetime.timedelta(days=i)
+        out.append({"date": str(day), "count": ctr.get(day,0)})
+    return {"activity": list(reversed(out))}
+# END stonecutter extension: visuals
+
+
+⸻
+
+3) Frontend (index page)
+
+Append after your table:
+
+<hr><h3>Signal Metrics (last 50 runs)</h3>
+<canvas id="timeseries" height="120"></canvas>
+
+<hr><h3>Provider Latency (latest run)</h3>
+<canvas id="providers" height="120"></canvas>
+
+<hr><h3>Provider Participation</h3>
+<canvas id="providerpie" height="120"></canvas>
+
+<hr><h3>Distribution Histogram</h3>
+<canvas id="distribution" height="120"></canvas>
+
+<hr><h3>Latest Run Radar</h3>
+<canvas id="radar" height="120"></canvas>
+
+<hr><h3>Run Activity (last 30 days)</h3>
+<canvas id="activity" height="120"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+async function fetchJSON(u){const r=await fetch(u,{cache:'no-store'});return await r.json();}
+function tsToLabel(s){if(s>1e12) s=Math.floor(s/1000);return new Date(s*1000).toLocaleString();}
+
+async function draw(){
+  // 1 Time series
+  const ts=await fetchJSON('/metrics/timeseries?limit=50');
+  new Chart(document.getElementById('timeseries'),{
+    type:'line',data:{labels:(ts.labels||[]).map(tsToLabel),
+      datasets:[
+        {label:'Confidence',data:ts.confidence,borderWidth:2},
+        {label:'Consensus',data:ts.consensus,borderWidth:2},
+        {label:'Diversity',data:ts.diversity,borderWidth:2}]},
+    options:{scales:{y:{beginAtZero:true,max:100}}}
+  });
+
+  // 2 Provider latency
+  const pv=await fetchJSON('/metrics/providers');
+  const provs=pv.providers||[];
+  new Chart(document.getElementById('providers'),{
+    type:'bar',data:{labels:provs.map(p=>p.provider),
+      datasets:[{label:'Avg Latency (ms)',data:provs.map(p=>p.avg_latency_ms||0)}]}
+  });
+
+  // 3 Provider participation
+  new Chart(document.getElementById('providerpie'),{
+    type:'doughnut',
+    data:{labels:provs.map(p=>p.provider),
+      datasets:[{label:'Mock vs Real',
+        data:provs.map(p=>p.mock+p.real)}]}
+  });
+
+  // 4 Distribution histogram
+  const dist=await fetchJSON('/metrics/distribution?bins=5&limit=200');
+  const labelsH=['0-20','20-40','40-60','60-80','80-100'];
+  new Chart(document.getElementById('distribution'),{
+    type:'bar',
+    data:{labels:labelsH,
+      datasets:[
+        {label:'Confidence',data:dist.confidence},
+        {label:'Consensus',data:dist.consensus},
+        {label:'Diversity',data:dist.diversity}]},
+    options:{scales:{y:{beginAtZero:true}}}
+  });
+
+  // 5 Radar
+  const latest=await fetchJSON('/metrics/latest');
+  new Chart(document.getElementById('radar'),{
+    type:'radar',
+    data:{labels:['Confidence','Consensus','Diversity'],
+      datasets:[{label:'Latest Run',data:[latest.confidence,latest.consensus,latest.diversity]}]}
+  });
+
+  // 6 Activity heatmap (simple bar)
+  const act=await fetchJSON('/metrics/activity?days=30');
+  new Chart(document.getElementById('activity'),{
+    type:'bar',
+    data:{labels:act.activity.map(a=>a.date),
+      datasets:[{label:'Runs',data:act.activity.map(a=>a.count)}]},
+    options:{scales:{y:{beginAtZero:true}}}
+  });
+}
+draw();
+</script>
+
+
+⸻
+
+4) README
+
+Add section:
+
+### Dashboard Visuals
+- /metrics/timeseries → Line chart (confidence/consensus/diversity)
+- /metrics/providers → Bar (latency), Doughnut (participation)
+- /metrics/distribution → Histogram of scores
+- /metrics/latest → Radar for most recent run
+- /metrics/activity → Activity over last 30 days
+

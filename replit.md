@@ -46,6 +46,13 @@ The architecture includes placeholder hooks for future enhancements:
 
 ## Recent Updates (August 2025)
 
+### Enhanced Dashboard with Comprehensive Visualizations (Latest)
+- **Six Interactive Charts**: Time-series, provider latency, participation pie, distribution histogram, radar, and activity heatmap
+- **Real-time Metrics Endpoints**: REST API endpoints for `/metrics/timeseries`, `/metrics/providers`, `/metrics/distribution`, `/metrics/latest`, `/metrics/activity`
+- **Chart.js Integration**: Professional visualizations with proper colors, legends, and responsive design
+- **Comprehensive Analytics**: Signal strength trends, provider performance analysis, score distributions, and activity tracking
+- **Enhanced Navigation**: Direct links to all metrics endpoints and JSON data for API consumers
+
 ### Hardened Persistence System with Dashboard (Latest)
 - **Absolute Path Configuration**: Database and JSONL paths now use absolute paths for consistency across engine and dashboard
 - **Robust Error Handling**: Comprehensive logging and error handling in persistence layer with graceful fallbacks

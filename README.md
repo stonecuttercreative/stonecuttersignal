@@ -67,6 +67,13 @@ python run_sample.py
 This sends several example briefs through the full pipeline (providers → arbitration → scoring → persistence).
 Open the dashboard at http://localhost:8000/ to view the populated results.
 
+## Dashboard Visuals
+- /metrics/timeseries → Line chart (confidence/consensus/diversity)
+- /metrics/providers → Bar (latency), Doughnut (participation)
+- /metrics/distribution → Histogram of scores
+- /metrics/latest → Radar for most recent run
+- /metrics/activity → Activity over last 30 days
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.
