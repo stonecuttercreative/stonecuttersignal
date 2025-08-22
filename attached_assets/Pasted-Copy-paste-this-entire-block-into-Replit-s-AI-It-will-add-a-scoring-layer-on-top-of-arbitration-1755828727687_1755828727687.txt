@@ -1,0 +1,210 @@
+Copy‑paste this entire block into Replit’s AI. It will:
+	•	add a scoring layer on top of arbitration,
+	•	add persistence/logging (SQLite + JSONL),
+	•	add a tiny dashboard (FastAPI) to view recent runs.
+
+It won’t delete anything you’ve built.
+
+You are my repo assistant. Keep the repo intact. Do not delete or rename existing files. Only add or minimally extend files with clear markers:
+
+# BEGIN stonecutter extension: <topic>
+# END stonecutter extension: <topic>
+
+Goal (stacked build)
+2) Add a scoring layer on top of arbitration.
+3) Add persistence/logging (SQLite + JSONL).
+4) Add a minimal FastAPI dashboard to inspect recent runs.
+
+Constraints
+- Backwards compatible: quick_check.py must still pass unchanged.
+- No hard fails: if DB is unavailable, skip persistence and continue.
+- If any provider lacks an API key, keep soft-fallback behavior.
+
+=====================
+A) SCORING LAYER (step 2)
+=====================
+1) Create `src/stonecutter/scoring/index.py`:
+- Expose `compute_signal_scores(panel_responses, final_scores)` returning:
+  {
+    "confidence": 0-100,
+    "diversity": 0-100,      # higher = more disagreement
+    "consensus": 0-100,      # agreement strength
+    "notes": {"method": "...", "n_providers": int}
+  }
+- Definitions:
+  * For each score key in final_scores, compute median across providers.
+  * Compute mean absolute deviation from that median across providers (MAD) averaged across keys ⇒ call this `avg_dev` (0..100+).
+  * confidence = clamp(0,100, round((1.0 - avg_dev/100.0) * 100))
+  * diversity  = clamp(0,100, round(min(100, avg_dev)))
+  * consensus  = clamp(0,100, round(100 - diversity))
+  * If telemetry present, downweight providers whose latency > p75 of latencies by 10% in the dev calculation.
+  * If only 1 provider produced values, set confidence=60, diversity=10, consensus=90.
+
+2) Open `src/stonecutter/arbitration/core.py`:
+- After computing `final_scores`, call `scoring.compute_signal_scores(responses, final_scores)` and return these fields alongside existing output.
+- Keep current median-based blend; do not remove it.
+
+3) Ensure the object returned by engine (Diagnostic or dict) includes:
+- top-level `meta.signal_scores = {confidence, diversity, consensus, notes}`
+
+=====================
+B) PERSISTENCE/LOGGING (step 3)
+=====================
+4) Settings
+Extend `src/stonecutter/settings.py` with:
+- `persistence_enabled: bool = True`
+- `db_path: str = "stonecutter.db"`
+- `jsonl_path: str = "data/run_logs.jsonl"` (create folder if needed)
+
+5) Storage layer
+Create `src/stonecutter/persistence/sqlite_store.py`:
+- On import, ensure a SQLite DB exists with tables:
+  runs(id TEXT PRIMARY KEY, ts INTEGER, mode TEXT, brand TEXT, category TEXT, audience TEXT, channels TEXT, confidence INTEGER, consensus INTEGER, diversity INTEGER, story TEXT)
+  scores(run_id TEXT, key TEXT, value INTEGER)
+  providers(run_id TEXT, name TEXT, model TEXT, latency_ms INTEGER, is_mock INTEGER)
+- Provide `init_db()`, `save_run(run_dict)` (idempotent UPSERT), and `last_runs(limit=50)`.
+
+6) JSONL logging
+Create `src/stonecutter/persistence/jsonl.py` with `append_jsonl(path, obj)` (ensure directory, append one line of compact JSON).
+
+7) Engine hook
+Open `src/stonecutter/engine.py`:
+- After arbitration + scoring, build a flat `run_record` dict:
+  id (UUID4), timestamp (int), intake fields, final scores, meta.signal_scores, story snippet (<= 280 chars), providers array with `_provider_name`, model, latency_ms, and a boolean `is_mock` (true if no API key or we fell back).
+- If `settings.persistence_enabled`:
+  * call `sqlite_store.init_db()` once lazily (module-level guard)
+  * call `sqlite_store.save_run(run_record)`
+  * call `jsonl.append_jsonl(settings.jsonl_path, run_record)`
+- Return the same structure as before so quick_check still passes, just with `meta.signal_scores` and `providers` included.
+
+=====================
+C) FASTAPI DASHBOARD (step 4)
+=====================
+8) Dependencies
+Add to pyproject if missing: `fastapi>=0.111.0`, `uvicorn>=0.30.0`
+Then run: pip install -e .
+
+9) Web app
+Create `src/stonecutter/webapp/app.py`:
+- FastAPI app with endpoints:
+  GET `/health` -> {"ok": true}
+  GET `/runs` -> last 50 runs from sqlite_store.last_runs()
+  GET `/runs/{id}` -> full run record (join scores + providers)
+  GET `/` -> simple HTML table showing last 20 runs with columns: ts, brand, concept (first 60 chars if available), confidence, consensus, diversity; link each row to `/runs/{id}`.
+- Use simple built-in HTML (no templates needed).
+
+10) CLI convenience
+Create `serve_dashboard.py` at repo root:
+```python
+if __name__ == "__main__":
+    import uvicorn
+    from stonecutter.webapp.app import app
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+=====================
+D) TESTS & SMOKE
+	11.	Add tests/test_scoring.py:
+
+	•	Build 3 fake provider responses with different scores; assert diversity > 0 and confidence between 0..100.
+	•	With identical responses, assert diversity ~ 0 and confidence near 100.
+
+	12.	Add tests/test_persistence.py:
+
+	•	Call save_run() on a tiny fake record; then last_runs() and assert at least one row with matching id.
+
+	13.	Keep quick_check.py unchanged; it must still pass.
+	14.	Shell commands to run:
+
+	•	pip install -e .
+	•	python -m pytest -q || true   # if pytest present; otherwise skip
+	•	python quick_check.py
+	•	python compare_ab.py
+	•	python serve_dashboard.py  # run server; you should see /health JSON endpoint
+Return: “Scoring + Persistence + Dashboard ready. quick_check passed; dashboard on :8000.”
+
+---
+
+# 🧩 Modular prompts (three precise steps)
+
+## Prompt 1 — Scoring layer only (safe & precise)
+
+Extend the Stonecutter engine with a scoring layer (no persistence, no web server). Do not delete or rename files.
+	1.	Create src/stonecutter/scoring/index.py:
+	•	export compute_signal_scores(panel_responses, final_scores) -> dict with confidence(0..100), diversity(0..100), consensus(0..100), notes.
+	•	Use median across providers per score key; compute avg absolute deviation from median; map to metrics as:
+avg_dev = mean(|provider_score - median|) over all providers and keys
+confidence = clamp(0,100, round((1 - avg_dev/100) * 100))
+diversity  = clamp(0,100, round(min(100, avg_dev)))
+consensus  = clamp(0,100, round(100 - diversity))
+	•	If telemetry.latency_ms exists, slightly downweight very slow providers: multiply their contribution by 0.9 in avg_dev.
+	2.	Open src/stonecutter/arbitration/core.py:
+	•	After final_scores are computed, call compute_signal_scores(…) and include the result in the returned dict under key “signal_scores_meta”.
+	3.	In src/stonecutter/engine.py:
+	•	Ensure the final object includes meta.signal_scores = value from “signal_scores_meta”.
+	•	Do not change quick_check.py expectations.
+	4.	Add tests in tests/test_scoring.py to validate high-consensus and low-consensus cases.
+
+Run:
+pip install -e .
+python quick_check.py
+
+## Prompt 2 — Persistence only (safe & precise)
+
+Add persistence/logging without changing outputs expected by quick_check.py.
+	1.	Settings: extend src/stonecutter/settings.py
+	•	persistence_enabled: bool = True
+	•	db_path: str = “stonecutter.db”
+	•	jsonl_path: str = “data/run_logs.jsonl”
+	2.	SQLite store: create src/stonecutter/persistence/sqlite_store.py
+	•	init_db(): create tables runs(id TEXT PK, ts INTEGER, mode TEXT, brand TEXT, category TEXT, audience TEXT, channels TEXT, confidence INTEGER, consensus INTEGER, diversity INTEGER, story TEXT)
+scores(run_id TEXT, key TEXT, value INTEGER)
+providers(run_id TEXT, name TEXT, model TEXT, latency_ms INTEGER, is_mock INTEGER)
+	•	save_run(run_dict): UPSERT run + insert scores/providers; safe if called twice
+	•	last_runs(limit=50): return compact rows
+	3.	JSONL: create src/stonecutter/persistence/jsonl.py
+	•	append_jsonl(path, obj): ensure parent dir; append one JSON line.
+	4.	Engine hook (src/stonecutter/engine.py):
+	•	After arbitration + meta.signal_scores, assemble run_record with UUID id, ts, intake fields, final scores, meta.signal_scores, story snippet (<= 280 chars), providers list.
+	•	If settings.persistence_enabled: call init_db() once (module-level) and then save_run(…) and append_jsonl(…).
+	•	Return original structure unchanged (plus meta.signal_scores), so quick_check still passes.
+	5.	tests/test_persistence.py:
+	•	Save a small fake record and assert it appears in last_runs().
+
+Run:
+pip install -e .
+python quick_check.py
+
+## Prompt 3 — Dashboard only (safe & precise)
+
+Add a minimal FastAPI dashboard to view recent runs. Do not change engine/persistence behavior.
+	1.	Dependencies (pyproject.toml): fastapi>=0.111.0, uvicorn>=0.30.0
+Then: pip install -e .
+	2.	Create src/stonecutter/webapp/app.py:
+	•	from fastapi import FastAPI
+	•	endpoints:
+GET /health -> {“ok”: True}
+GET /runs -> last 50 runs from persistence.sqlite_store.last_runs()
+GET /runs/{id} -> fetch run + its scores & providers (compose response from sqlite)
+GET / -> serve simple HTML table with last 20 runs and link to details
+	3.	Create serve_dashboard.py at repo root:
+
+if __name__ == "__main__":
+    import uvicorn
+    from stonecutter.webapp.app import app
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+	4.	README: add a short “Dashboard” section with how to start it.
+
+Run:
+python serve_dashboard.py
+
+Visit /health then / to see the table
+
+---
+
+### Quick sanity checklist after you run any of these
+- `python quick_check.py` → all 3 green.
+- `python compare_ab.py` → shows providers list + arbitrated scores.
+- If you ran persistence: file `stonecutter.db` exists and grows; `data/run_logs.jsonl` grows.
+- If you ran the dashboard: `/health` returns `{"ok": true}` and `/` shows the last runs.

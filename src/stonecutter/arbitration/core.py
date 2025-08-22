@@ -52,7 +52,12 @@ def arbitrate(responses: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     contradictions = [c for c in all_claims if str(c).strip().upper().startswith("NOT:")]
 
-    return {
+    # BEGIN stonecutter extension: scoring layer integration
+    from ..scoring.index import compute_signal_scores
+    signal_scores_meta = compute_signal_scores(responses, final_scores)
+    # END stonecutter extension
+    
+    result = {
         "cluster": cluster,
         "archetype": archetype,
         "scores": final_scores,
@@ -60,4 +65,10 @@ def arbitrate(responses: List[Dict[str, Any]]) -> Dict[str, Any]:
         "confidence": round(confidence, 2),
         "story": responses[0].get("story",""),
     }
+    
+    # BEGIN stonecutter extension: include signal scores meta
+    result["signal_scores_meta"] = signal_scores_meta
+    # END stonecutter extension
+    
+    return result
 # END stonecutter extension

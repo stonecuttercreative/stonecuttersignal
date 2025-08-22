@@ -1144,6 +1144,45 @@ CONTEXT:
                 arbitrated["providers"] = surface_telemetry(responses)
             # END stonecutter extension
             
+            # BEGIN stonecutter extension: include signal scores in meta
+            if "signal_scores_meta" in arbitrated:
+                if "meta" not in arbitrated:
+                    arbitrated["meta"] = {}
+                arbitrated["meta"]["signal_scores"] = arbitrated.pop("signal_scores_meta")
+            # END stonecutter extension
+            
+            # BEGIN stonecutter extension: persistence hook
+            try:
+                from src.stonecutter.settings import settings
+                if settings.persistence_enabled and PROVIDER_SYSTEM_AVAILABLE:
+                    import uuid
+                    import time
+                    from src.stonecutter.persistence.sqlite_store import save_run
+                    from src.stonecutter.persistence.jsonl import append_jsonl
+                    
+                    # Build run record
+                    run_record = {
+                        'id': str(uuid.uuid4()),
+                        'timestamp': int(time.time()),
+                        'mode': 'real-time',  # Default mode
+                        'brand': 'Unknown',   # Would be extracted from brief
+                        'category': 'Unknown', # Would be extracted from brief
+                        'audience': '',       # Would be extracted from brief
+                        'channels': '',       # Would be extracted from brief
+                        'scores': arbitrated.get('scores', {}),
+                        'meta': arbitrated.get('meta', {}),
+                        'story': arbitrated.get('story', '')[:280],  # Truncate story
+                        'providers': arbitrated.get('providers', [])
+                    }
+                    
+                    # Save to persistence layer
+                    save_run(run_record)
+                    append_jsonl(settings.jsonl_path, run_record)
+            except Exception as e:
+                # Silent fail - continue without persistence if unavailable
+                logger.debug(f"Persistence failed: {e}")
+            # END stonecutter extension
+            
             return arbitrated
             
         except Exception as e:

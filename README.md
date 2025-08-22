@@ -46,6 +46,16 @@ python compare_ab.py     # A/B provider comparison
 python test_providers.py # Provider system demo
 ```
 
+## Dashboard
+
+View recent analysis runs and performance metrics via the web dashboard:
+
+```bash
+python serve_dashboard.py
+```
+
+Visit http://localhost:8000 to see the dashboard with recent runs, confidence scores, and provider performance metrics.
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.

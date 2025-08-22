@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     enable_grok: bool = True
     # END stonecutter extension: grok
 
+    # BEGIN stonecutter extension: persistence settings
+    persistence_enabled: bool = True
+    db_path: str = "stonecutter.db"
+    jsonl_path: str = "data/run_logs.jsonl"
+    # END stonecutter extension
+
     # Enable or disable each provider
     enable_openai: bool = True
     enable_claude: bool = True
