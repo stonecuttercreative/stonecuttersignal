@@ -1,3 +1,17 @@
+You are my repo assistant. Do not delete or break existing functionality. Update the file quick_check.py so it becomes a robust validation harness. It must:
+	1.	Try to import either run_signal_engine or run_signal from the package. If both fail, also try stonecutter.engine.run_signal.
+	2.	Handle both output shapes:
+	•	Flat: {"scores": {...}, "notes": {...}}
+	•	Nested: {"signal_scores": {"scores": {...}, "notes": {...}}}
+	3.	Run three tests:
+	•	Legacy plain string input → must include conversation_fit, exclude distribution_fit, and have a note saying “Distribution Fit not evaluated (channels not provided)”.
+	•	Dict with audience only → must include conversation_fit, exclude distribution_fit, and audience text must appear in output.
+	•	Dict with audience + channels → must include both conversation_fit and distribution_fit (0–100).
+	4.	Print ✓ for each passed test and 🎉 “All checks passed” at the end.
+	5.	If a check fails, print ❌ with the reason and a tip to inspect the output.
+
+Replace the entire contents of quick_check.py with this:
+
 #!/usr/bin/env python3
 """
 Quick validation script for Stonecutter Signal extensions.
@@ -41,11 +55,7 @@ def _has_audience(result, audience_text):
 def test_legacy_string_input(run):
     print("Test 1: Legacy plain string input...")
     brief = "Concept about clarity in crypto ads"
-    # Handle both run_signal_engine(brief, interactive_mode=False) and run_signal(brief)
-    try:
-        result = run(brief, interactive_mode=False)
-    except TypeError:
-        result = run(brief)
+    result = run(brief)
     scores, notes = _scores_block(result)
     assert "conversation_fit" in scores, f"conversation_fit missing. Got keys: {list(scores.keys())}"
     assert "distribution_fit" not in scores, "distribution_fit should be absent"
@@ -63,11 +73,7 @@ def test_dict_input_audience_only(run):
         "mode": "realtime",
         "audience": audience
     }
-    # Handle both run_signal_engine(brief, interactive_mode=False) and run_signal(brief)
-    try:
-        result = run(brief, interactive_mode=False)
-    except TypeError:
-        result = run(brief)
+    result = run(brief)
     scores, notes = _scores_block(result)
     assert "conversation_fit" in scores, "conversation_fit missing"
     assert "distribution_fit" not in scores, "distribution_fit should be absent"
@@ -85,11 +91,7 @@ def test_dict_input_audience_and_channels(run):
         "audience": "eco-conscious professionals",
         "channels": "TV, YouTube, Instagram"
     }
-    # Handle both run_signal_engine(brief, interactive_mode=False) and run_signal(brief)
-    try:
-        result = run(brief, interactive_mode=False)
-    except TypeError:
-        result = run(brief)
+    result = run(brief)
     scores, _ = _scores_block(result)
     assert "conversation_fit" in scores, "conversation_fit missing"
     assert "distribution_fit" in scores, "distribution_fit missing"
@@ -111,3 +113,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+After updating, run in Replit shell:
+
+python quick_check.py
+
+It should print all three ✓ and end with 🎉 All checks passed.
