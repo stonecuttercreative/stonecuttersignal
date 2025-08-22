@@ -43,6 +43,13 @@ The architecture includes placeholder hooks for future enhancements:
 
 ## Recent Updates (August 2025)
 
+### Platform_Fit to Conversation_Fit Migration (Latest)
+- **Legacy Support**: Automatic mapping of legacy "platform_fit" scores to "conversation_fit"  
+- **Structured Notes**: Distribution_fit notes moved to proper "notes" object structure
+- **Audience Integration**: Target audience information now displayed in final output when provided
+- **Non-Interactive Mode**: Added flag to skip interactive clarification for programmatic testing
+- **Validation Testing**: Comprehensive test suite validates backward compatibility and new features
+
 ### Enhanced Intake System
 - **Optional Fields**: Added support for Audience and Channels fields in campaign briefs
 - **Backwards Compatibility**: System operates normally when optional fields are absent

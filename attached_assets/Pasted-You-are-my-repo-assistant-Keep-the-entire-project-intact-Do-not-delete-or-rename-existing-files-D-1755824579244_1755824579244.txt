@@ -1,0 +1,102 @@
+You are my repo assistant. Keep the entire project intact. Do not delete or rename existing files. Do not break current behavior. Extend the repo to add optional intake fields and the scoring tweak. Use the reference at the bottom only as guidance. If the current structure differs, adapt without heavy refactors. Make minimal, well commented changes.
+
+Goals
+1) Intake accepts optional audience and channels in addition to what already works today.
+2) Scoring
+   - Always return conversation_fit. If legacy code uses platform_fit, map it to conversation_fit internally and keep outputs under conversation_fit.
+   - If channels is present, compute and include distribution_fit 0 to 100.
+   - If channels is missing, do not include distribution_fit and add a note: "Distribution Fit not evaluated (channels not provided)" in an existing notes field or create notes if needed.
+3) Narrative
+   - Include audience text in the internal context so it informs the Signal Story. Do not change any other fields.
+4) Backward compatibility
+   - If the user sends the old input shape or a plain string concept, behavior stays identical.
+   - Keep the main public function name as it is now. If it is run_signal, keep using run_signal.
+
+Implementation rules
+- Prefer small edits over big refactors. If the suggested files already exist, extend them. If not, create them.
+- When adding code, wrap with comments
+  BEGIN stonecutter extension
+  END stonecutter extension
+- If a Pydantic schema or dict schema exists, extend it. Otherwise add the minimal schema or shaping where you already format outputs.
+- If you need a placeholder for distribution_fit, derive it from existing scores such as average of clarity and conversation_fit, clipped to 0 to 100.
+- Update any prompt or story builder so audience and channels are injected when present. If prompts are inline, add a few lines. If a template file exists, pass variables through.
+- Do not change unrelated logic. Do not alter logging, caching, or providers beyond what is required for the rename and new optional fields.
+
+Validation
+Create or append a quick_check.py at repo root. If it exists, append. It must import the public run entrypoint and run three checks.
+
+Checks
+1) Legacy plain string input. Expect conversation_fit present. Expect distribution_fit absent. Expect notes.distribution_fit contains the not evaluated message.
+2) Dict input with audience only. Expect conversation_fit present. distribution_fit absent. Audience shows up in the output either as audience_note or in the input echo or context.
+3) Dict input with audience and channels. Expect conversation_fit present. distribution_fit present and 0 to 100.
+
+After edits, run:
+python quick_check.py
+Print "All checks passed" if all three pass. If imports differ, adapt the quick_check import to the actual entrypoint.
+
+Reference (use for guidance only, not as hard requirements)
+0) Create folders
+src/stonecutter/
+  __init__.py
+  settings.py
+  schemas.py
+  logging_conf.py
+  prompts/
+    diagnostic.jinja
+  providers/
+    base.py
+    mock_llm.py
+  arbitration/
+    core.py
+  evidence/
+    cache.py
+  engine.py
+  cli.py
+examples/
+  eval_briefs.jsonl
+pyproject.toml
+README.md
+
+1) pyproject
+[project]
+name = "stonecutter"
+version = "0.1.0"
+description = "Stonecutter Signal engine skeleton"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["pydantic>=2.7","jinja2>=3.1"]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+2) settings.py
+Pydantic BaseSettings with mode, max_concurrency, request_timeout_s, cache_enabled, feature flags for reddit and tiktok.
+
+3) schemas.py
+Intake adds audience Optional[str] and channels Optional[str]. Scores uses conversation_fit, optional distribution_fit. Diagnostic can include audience_note.
+
+4) logging_conf.py
+Basic stdout logger.
+
+5) prompts/diagnostic.jinja
+Variables for brand, category, mode, audience, channels, concept. Return cluster, archetype, story, scores including distribution_fit only when channels provided.
+
+6) providers/base.py and providers/mock_llm.py
+Simple provider protocol and a mock provider that returns consistent fake scores. Add distribution_fit only when channels present in rendered prompt.
+
+7) arbitration/core.py
+Median across model scores and simple contradiction flags.
+
+8) evidence/cache.py
+Tiny cache helper.
+
+9) engine.py
+Build prompt with audience and channels. Map legacy platform_fit to conversation_fit. Include distribution_fit only when channels provided. Add the notes message when channels missing.
+
+10) cli.py
+CLI that reads JSON or string from stdin and prints output. Optional eval file.
+
+11) examples/eval_briefs.jsonl
+Two example briefs.
+
+12) README
+Quick start notes and the rename note.

@@ -944,9 +944,18 @@ Note: conversation_fit measures how well the creative matches environments where
             
             result = json.loads(response.choices[0].message.content)
             
+            # BEGIN stonecutter extension - Handle platform_fit mapping and notes structure
+            # Map any legacy platform_fit to conversation_fit
+            if 'scores' in result and 'platform_fit' in result['scores']:
+                result['scores']['conversation_fit'] = result['scores'].pop('platform_fit')
+                logger.info("Mapped legacy platform_fit to conversation_fit")
+            
             # Add distribution_fit note if channels not provided
-            if not channels and 'scores' in result:
-                result['distribution_fit_note'] = "Distribution Fit not evaluated (channels not provided)"
+            if not channels:
+                if 'notes' not in result:
+                    result['notes'] = {}
+                result['notes']['distribution_fit'] = "Distribution Fit not evaluated (channels not provided)"
+            # END stonecutter extension
             
             logger.info("Successfully evaluated Signal scores")
             return result
@@ -968,10 +977,14 @@ Note: conversation_fit measures how well the creative matches environments where
                 "reasoning": "Unable to evaluate due to error. Default scores provided."
             }
             
+            # BEGIN stonecutter extension - Handle fallback distribution_fit and notes
             if channels:
-                fallback_result["scores"]["distribution_fit"] = 50
+                # Calculate placeholder distribution_fit from existing scores
+                avg_score = (fallback_scores["clarity"] + fallback_scores["conversation_fit"]) / 2
+                fallback_result["scores"]["distribution_fit"] = max(0, min(100, int(avg_score)))
             else:
-                fallback_result['distribution_fit_note'] = "Distribution Fit not evaluated (channels not provided)"
+                fallback_result['notes'] = {'distribution_fit': "Distribution Fit not evaluated (channels not provided)"}
+            # END stonecutter extension
             
             return fallback_result
     
@@ -1058,12 +1071,12 @@ CONTEXT:
         pass
 
 
-def run_signal_engine(brief: str) -> Dict[str, Any]:
+def run_signal_engine(brief, interactive_mode: bool = True) -> Dict[str, Any]:
     """
     Main execution flow for Stonecutter Signal analysis.
     
     Args:
-        brief: The campaign brief to analyze
+        brief: The campaign brief to analyze (string or dict with optional audience/channels)
         
     Returns:
         Complete analysis results including scores and story
@@ -1074,18 +1087,37 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
     engine = StonecutterSignal()
     
     try:
-        # Step 0: Parse brief fields to extract optional Audience and Channels
-        brief_fields = engine.parse_brief_fields(brief)
-        audience = brief_fields.get('audience')
-        channels = brief_fields.get('channels')
+        # BEGIN stonecutter extension - Support dict input with optional audience/channels
+        if isinstance(brief, dict):
+            # Dict input: extract fields directly
+            brief_text = brief.get('concept', brief.get('brief', ''))
+            audience = brief.get('audience')
+            channels = brief.get('channels')
+            
+            # Create brief_fields from dict input
+            brief_fields = {
+                'brand': brief.get('brand', 'Unknown'),
+                'category': brief.get('category', 'Unknown'),
+                'concept': brief_text,
+                'mode': brief.get('mode', 'Unknown'),
+                'audience': audience,
+                'channels': channels
+            }
+        else:
+            # String input: parse fields using existing logic
+            brief_text = brief
+            brief_fields = engine.parse_brief_fields(brief)
+            audience = brief_fields.get('audience')
+            channels = brief_fields.get('channels')
+        # END stonecutter extension
         
         # Step 1: Separate concepts if multiple exist
         # TODO: Handle multiple concepts by processing each separately
-        concepts = engine.separate_concepts(brief)
+        concepts = engine.separate_concepts(brief_text)
         logger.info(f"Identified {len(concepts)} concept(s)")
         
         # For now, process the first concept (TODO: handle multiple concepts)
-        current_concept = concepts[0] if concepts else brief
+        current_concept = concepts[0] if concepts else brief_text
         
         # Step 2: Check and clarify brand context
         # TODO: Loop back for clarification if needed
@@ -1098,7 +1130,8 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
         # Step 3.5: Check if audience/channels need clarification
         specificity_check = engine.check_audience_channels_specificity(audience, channels)
         
-        if specificity_check.get('needs_clarification') and specificity_check.get('clarification_question'):
+        # BEGIN stonecutter extension - Skip interactive clarification in non-interactive mode
+        if specificity_check.get('needs_clarification') and specificity_check.get('clarification_question') and interactive_mode:
             print(f"\n🤔 {specificity_check['clarification_question']}")
             clarification_response = input("Your answer: ")
             
@@ -1111,6 +1144,9 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
                 brief_fields['channels'] = clarification_response  
                 channels = clarification_response
                 logger.info(f"Updated channels with clarification: {channels}")
+        elif specificity_check.get('needs_clarification') and not interactive_mode:
+            logger.info("Skipping interactive clarification in non-interactive mode")
+        # END stonecutter extension
         
         # Step 4: Select relevant evidence sources
         # TODO: Use cluster and archetype for source selection  
@@ -1173,6 +1209,11 @@ def run_signal_engine(brief: str) -> Dict[str, Any]:
             'timestamp': time.time(),
             'status': 'success'
         }
+        
+        # BEGIN stonecutter extension - Add audience note if present
+        if audience:
+            final_results['audience_note'] = f"Analysis conducted with {audience} audience context"
+        # END stonecutter extension
         
         # Validate JSON structure
         validated_results = engine.validate_and_reformat_json(json.dumps(final_results))
