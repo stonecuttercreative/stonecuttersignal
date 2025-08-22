@@ -26,6 +26,10 @@ python quick_check.py
 Set `ANTHROPIC_API_KEY` in Replit secrets. If unset, Claude falls back to a mock so runs never fail.
 Check `compare_ab.py` to see per‑provider contributions and the arbitrated result.
 
+### Using Gemini (real API)
+Set `GOOGLE_GENAI_API_KEY` in Replit Secrets. If unset, Gemini falls back to a mock so runs never fail.
+Default model: `gemini-1.5-pro` (change in settings if needed).
+
 ### Testing Commands
 ```bash
 python quick_check.py    # Validation tests

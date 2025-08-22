@@ -1,0 +1,163 @@
+You are my repo assistant. Do not delete or rename existing files. Only extend them with clearly marked blocks:
+
+# BEGIN stonecutter extension: <desc>
+# END stonecutter extension
+
+Goal
+Enable a real Google Gemini provider alongside current providers (OpenAI, Claude, Grok, Perplexity, Mistral). If GOOGLE_GENAI_API_KEY is missing, fall back to the mock so runs never fail. Capture simple telemetry (latency, model). Keep all current behavior and tests green.
+
+⸻
+
+1) Add dependency
+
+Append to pyproject.toml’s dependencies (if not there), then reinstall:
+
+google-generativeai>=0.7.2
+
+After edits:
+
+pip install -e .
+
+2) Settings (API key + default model)
+
+Open src/stonecutter/settings.py and ensure these exist:
+
+# BEGIN stonecutter extension: gemini settings
+from pydantic import Field
+
+class Settings(BaseSettings):
+    # ...
+    google_genai_key: str | None = Field(default=None, env="GOOGLE_GENAI_API_KEY")
+    gemini_model: str = "gemini-1.5-pro"  # adjust if you prefer 'gemini-1.5-flash'
+# END stonecutter extension
+
+3) Real Gemini provider with safe fallback
+
+Create or edit src/stonecutter/providers/gemini_llm.py:
+
+# BEGIN stonecutter extension: real Gemini provider
+from typing import Dict, Any
+import json, asyncio, time
+import google.generativeai as genai
+from ..settings import settings
+from ._mock_util import mock_complete
+
+PROMPT_WRAPPER = """You are a cultural diagnostics analyst.
+Return STRICT JSON ONLY, no prose.
+JSON schema:
+{{
+  "cluster": str,
+  "archetype": str,
+  "story": str,
+  "scores": {{
+    "cultural_fit": int, "clarity": int, "emotional_resonance": int,
+    "differentiation": int, "conversation_fit": int{extra_score}
+  }},
+  "claims": [str, str, str]
+}}
+Input:
+{input_block}
+"""
+
+class GeminiProvider:
+    name = "gemini"
+
+    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        if not settings.enable_gemini or not settings.google_genai_key:
+            return await mock_complete(self.name, prompt)
+
+        extra = ', "distribution_fit": int' if ("Channels:" in prompt and "N/A" not in prompt) else ""
+        wrapped = PROMPT_WRAPPER.format(extra_score=extra, input_block=prompt)
+
+        start = time.time()
+        try:
+            # Configure once per call (simple + safe here)
+            genai.configure(api_key=settings.google_genai_key)
+
+            # Gemini SDK is sync-ish; use thread executor to avoid blocking
+            def _call():
+                model = genai.GenerativeModel(settings.gemini_model)
+                # We ask for JSON; some SDKs need a system prompt or MIME. Keep simple here.
+                resp = model.generate_content(wrapped)
+                # Extract plain text
+                return resp.text if hasattr(resp, "text") else str(resp)
+
+            loop = asyncio.get_running_loop()
+            text = await loop.run_in_executor(None, _call)
+
+            try:
+                data = json.loads(text)
+            except Exception:
+                # If parsing fails (model added prose), fallback to mock to keep pipeline stable
+                return await mock_complete(self.name, prompt)
+
+            data["_telemetry"] = {
+                "provider": self.name,
+                "latency_ms": int((time.time() - start) * 1000),
+                "model": settings.gemini_model,
+                # Gemini SDK may not expose token counts here; leave None
+                "input_tokens": None,
+                "output_tokens": None,
+            }
+            return data
+        except Exception:
+            return await mock_complete(self.name, prompt)
+# END stonecutter extension
+
+4) Provider registry (ensure Gemini is included)
+
+Open src/stonecutter/providers/registry.py and confirm GeminiProvider is imported and added. If missing, append:
+
+# BEGIN stonecutter extension: registry add gemini
+from .gemini_llm import GeminiProvider
+# (already likely imported)
+# ensure load_panel() appends GeminiProvider() when settings.enable_gemini is True
+# END stonecutter extension
+
+5) Engine – provider tagging (if not already)
+
+In src/stonecutter/engine.py, ensure each provider’s output is tagged:
+
+# BEGIN stonecutter extension: provider tag
+out = await m.complete(prompt)
+out["_provider_name"] = getattr(m, "name", "unknown")
+# END stonecutter extension
+
+6) Bubble up simple telemetry (optional but useful)
+
+After arbitration (where you construct the final result dict), surface per‑provider meta:
+
+# BEGIN stonecutter extension: telemetry bubble-up
+final_result = final_result if isinstance(final_result, dict) else dict(final_result)
+final_result["providers"] = [
+    {
+        "provider": r.get("_provider_name"),
+        "model": (r.get("_telemetry") or {}).get("model"),
+        "latency_ms": (r.get("_telemetry") or {}).get("latency_ms"),
+    } for r in panel_out
+]
+# END stonecutter extension
+
+7) README note
+
+Append:
+
+### Using Gemini (real API)
+Set `GOOGLE_GENAI_API_KEY` in Replit Secrets. If unset, Gemini falls back to a mock so runs never fail.
+Default model: `gemini-1.5-pro` (change in settings if needed).
+
+8) Run checks
+
+In shell:
+
+pip install -e .
+python quick_check.py
+python compare_ab.py
+
+Expected:
+	•	quick_check.py still passes all 3 tests (backwards compatibility preserved).
+	•	compare_ab.py prints arbitrated result and lists per‑provider scores.
+If the Gemini key isn’t set, you’ll see the Gemini row with a latency and model of None/mock; if set, you’ll see real latency and model name.
+
+Finally print:
+Gemini provider live with soft fallback; arbitration + telemetry verified.
