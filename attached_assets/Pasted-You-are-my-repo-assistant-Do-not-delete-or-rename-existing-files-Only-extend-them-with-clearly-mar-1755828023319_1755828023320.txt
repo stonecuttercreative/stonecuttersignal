@@ -1,11 +1,44 @@
+You are my repo assistant. Do not delete or rename existing files. Only extend them with clearly marked blocks:
+
+# BEGIN stonecutter extension: <desc>
+# END stonecutter extension
+
+Goal
+Enable a real Perplexity provider alongside the current panel (OpenAI, Claude, Gemini, Grok, Mistral). If PERPLEXITY_API_KEY is missing, fall back to mock so runs never fail. Capture simple telemetry (latency, model). Keep all tests green.
+
+⸻
+
+1) Add dependency (HTTP client)
+
+Append to pyproject.toml dependencies if missing, then reinstall:
+
+httpx>=0.27.0
+
+After edits:
+
+pip install -e .
+
+2) Settings (API key + default model)
+
+Open src/stonecutter/settings.py and ensure these exist:
+
+# BEGIN stonecutter extension: perplexity settings
+from pydantic import Field
+
+class Settings(BaseSettings):
+    # ...
+    perplexity_api_key: str | None = Field(default=None, env="PERPLEXITY_API_KEY")
+    perplexity_model: str = "llama-3.1-sonar-large-32k-online"  # adjust if needed
+# END stonecutter extension
+
+3) Real Perplexity provider with safe fallback
+
+Create or edit src/stonecutter/providers/perplexity_llm.py:
+
 # BEGIN stonecutter extension: real Perplexity provider
 from typing import Dict, Any
 import json, asyncio, time
-try:
-    import httpx
-    HTTPX_AVAILABLE = True
-except ImportError:
-    HTTPX_AVAILABLE = False
+import httpx
 from ..settings import settings
 from ._mock_util import mock_complete
 
@@ -34,7 +67,7 @@ class PerplexityProvider:
 
     async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
         # Fallback if disabled or no key
-        if not settings.enable_perplexity or not settings.perplexity_api_key or not HTTPX_AVAILABLE:
+        if not settings.enable_perplexity or not settings.perplexity_api_key:
             return await mock_complete(self.name, prompt)
 
         extra = ', "distribution_fit": int' if ("Channels:" in prompt and "N/A" not in prompt) else ""
@@ -84,3 +117,45 @@ class PerplexityProvider:
             # Never hard‑fail—fallback to mock
             return await mock_complete(self.name, prompt)
 # END stonecutter extension
+
+4) Provider registry (ensure Perplexity is included)
+
+Open src/stonecutter/providers/registry.py and confirm Perplexity import + enable flag are present. If missing, append:
+
+# BEGIN stonecutter extension: registry add perplexity
+from .perplexity_llm import PerplexityProvider
+# In load_panel(), ensure:
+# if settings.enable_perplexity: panel.append(PerplexityProvider())
+# END stonecutter extension
+
+5) Engine: make sure provider outputs are tagged (if not already)
+
+In src/stonecutter/engine.py, confirm each provider’s output sets _provider_name (we already did this for Claude/Gemini).
+
+6) Bubble up telemetry (optional but useful)
+
+If you surface provider meta in the final result, Perplexity should now appear with model and latency_ms.
+
+7) README note
+
+Append:
+
+### Using Perplexity (real API)
+Set `PERPLEXITY_API_KEY` in Replit Secrets. If unset, the provider falls back to a mock so runs never fail.
+Default model: `llama-3.1-sonar-large-32k-online` (change in settings).
+
+8) Run checks
+
+In shell:
+
+pip install -e .
+python quick_check.py
+python compare_ab.py
+
+Expected:
+	•	quick_check.py still passes all three tests (backwards compatibility preserved).
+	•	compare_ab.py prints the arbitrated result and shows a Perplexity row in the provider list.
+If the API key is absent, it will show mock behavior; if present, you’ll see real latency and the model name.
+
+Finally print:
+Perplexity provider live with soft fallback; arbitration + telemetry verified.

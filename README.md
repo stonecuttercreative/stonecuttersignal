@@ -30,6 +30,10 @@ Check `compare_ab.py` to see per‑provider contributions and the arbitrated res
 Set `GOOGLE_GENAI_API_KEY` in Replit Secrets. If unset, Gemini falls back to a mock so runs never fail.
 Default model: `gemini-1.5-pro` (change in settings if needed).
 
+### Using Perplexity (real API)
+Set `PERPLEXITY_API_KEY` in Replit Secrets. If unset, the provider falls back to a mock so runs never fail.
+Default model: `llama-3.1-sonar-large-32k-online` (change in settings).
+
 ### Testing Commands
 ```bash
 python quick_check.py    # Validation tests

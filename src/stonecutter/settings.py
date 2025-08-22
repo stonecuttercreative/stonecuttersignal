@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-1.5-pro"  # adjust if you prefer 'gemini-1.5-flash'
     # END stonecutter extension
 
+    # BEGIN stonecutter extension: perplexity settings
+    perplexity_model: str = "llama-3.1-sonar-large-32k-online"  # adjust if needed
+    # END stonecutter extension
+
     # Enable or disable each provider
     enable_openai: bool = True
     enable_claude: bool = True
