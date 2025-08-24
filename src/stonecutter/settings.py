@@ -29,18 +29,17 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     claude_model: str = "claude-3-5-sonnet-20240620"
     gemini_model: str = "gemini-1.5-pro"
-# BEGIN patch: perplexity-safe-fallbacks
-    perplexity_model: str = "llama-3.1-mini-4k-online"
+# BEGIN patch: perplexity-sonar-fallbacks
+    perplexity_model: str = "llama-3.1-sonar-small-128k-online"
     grok_model: str = "grok-2-1212"
 
     claude_fallbacks: list[str] = ["claude-3-5-sonnet-20240620","claude-3-haiku-20240307","claude-2.1"]
     gemini_fallbacks: list[str] = ["gemini-1.5-pro","gemini-1.5-flash","gemini-pro"]
-# BEGIN patch: perplexity-mini-fallbacks
     perplexity_fallbacks: list[str] = [
-        "llama-3.1-mini-4k-online",
-        "llama-3.1-mini-128k-online",
+        "llama-3.1-sonar-small-128k-online",
+        "llama-3.1-sonar-large-32k-online",
     ]
-# END patch: perplexity-mini-fallbacks
+# END patch: perplexity-sonar-fallbacks
 # END patch: perplexity-safe-fallbacks
 
     grok_fallbacks: list[str] = ["grok-2-1212", "grok-2-latest"]

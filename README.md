@@ -172,6 +172,15 @@ Perplexity has been configured to use the most widely-available models:
 If your account later gains access to Sonar models, update `perplexity_fallbacks` in `settings.py` accordingly.
 # END patch: perplexity-mini-fallbacks
 
+# BEGIN patch: perplexity-sonar-fallbacks
+### Perplexity SONAR models
+Perplexity is now configured to try SONAR models:
+- `llama-3.1-sonar-small-128k-online` (default)
+- `llama-3.1-sonar-large-32k-online` (fallback)
+
+If your account exposes a different set, update `perplexity_fallbacks` in `settings.py` accordingly.
+# END patch: perplexity-sonar-fallbacks
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.
