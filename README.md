@@ -142,6 +142,18 @@ python scripts/diag_all.py
 - If a provider fails, you'll see explicit *_error: text (missing key, model not found, HTTP error).
 # END composite: env+providers
 
+# BEGIN patch: perplexity+grok-live
+### Live providers: Perplexity + Grok (xAI)
+- **Perplexity** now tries small → large models and retries with two payload formats to avoid 400s on some tenants.
+- **Grok/xAI** uses OpenAI-style `POST https://api.x.ai/v1/chat/completions` with `Authorization: Bearer $XAI_API_KEY`.
+- Configure model defaults in `settings.py` (`perplexity_fallbacks`, `grok_fallbacks`).
+- Verify:
+```bash
+pip install -e .
+python scripts/diag_all.py
+```
+# END patch: perplexity+grok-live
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.

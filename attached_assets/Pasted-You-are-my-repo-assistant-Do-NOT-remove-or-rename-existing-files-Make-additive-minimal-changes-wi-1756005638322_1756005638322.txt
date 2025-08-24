@@ -1,0 +1,177 @@
+You are my repo assistant. Do NOT remove or rename existing files. Make additive, minimal changes with explicit markers.
+
+# BEGIN patch: perplexity+grok-live
+# END patch: perplexity+grok-live
+
+GOALS
+1) Perplexity → go LIVE reliably:
+   - Reorder fallbacks to smaller, broadly allowed models first.
+   - Auto‑retry with two payload formats on HTTP 400 before failing.
+   - Keep explicit error messages (no silent fallback).
+2) Grok/xAI → switch from stub to real HTTP provider:
+   - Use OpenAI‑style chat completions endpoint with Bearer token from env XAI_API_KEY.
+   - Prefer model `grok-2-1212`, fallback to `grok-2-latest` on NotFound/400.
+   - Surface latency, model name, and clear error messages.
+
+────────────────────────────────────────────────────────────────────────
+
+A) settings.py — tweak Perplexity model order and add Grok fallbacks (append if missing; keep your existing fields)
+
+# BEGIN patch: perplexity+grok-live
+from pydantic import Field
+import os
+
+class Settings(BaseSettings):
+    # (keep your existing keys and toggles)
+    perplexity_model: str = "llama-3.1-sonar-small-128k-online"
+    perplexity_fallbacks: list[str] = [
+        "llama-3.1-sonar-small-128k-online",
+        "llama-3.1-mini-4k-online",
+        "llama-3.1-sonar-large-32k-online",
+    ]
+
+    grok_model: str = "grok-2-1212"
+    grok_fallbacks: list[str] = ["grok-2-1212", "grok-2-latest"]
+# END patch: perplexity+grok-live
+
+────────────────────────────────────────────────────────────────────────
+
+B) src/stonecutter/providers/perplexity_llm.py — robust request with dual payload formats
+
+# BEGIN patch: perplexity+grok-live
+import time, httpx
+from ..settings import settings
+
+PPLX_URL = "https://api.perplexity.ai/chat/completions"
+
+class PerplexityProvider:
+    name = "perplexity"
+
+    async def complete(self, prompt: str, **kw):
+        t0 = time.time()
+        key = settings.perplexity_api_key
+        if not key:
+            return {"provider": self.name, "model": None, "latency_ms": int((time.time()-t0)*1000),
+                    "error":"perplexity_error: missing PERPLEXITY_API_KEY"}
+
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        last_err = None
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            for model in settings.perplexity_fallbacks:
+                # Try canonical OpenAI-style payload first
+                bodies = [
+                    {"model": model,
+                     "messages":[{"role":"user","content": prompt[:4000]}],
+                     "temperature":0.2, "max_tokens":256},
+                    # Alternate minimal body (some tenants prefer fewer fields)
+                    {"model": model,
+                     "messages":[{"role":"user","content": prompt[:4000]}]}
+                ]
+                for body in bodies:
+                    try:
+                        r = await client.post(PPLX_URL, headers=headers, json=body)
+                        if r.status_code != 200:
+                            last_err = f"perplexity_error: HTTP {r.status_code} {r.text[:140]}"
+                            continue
+                        data = r.json()
+                        txt = (data.get("choices") or [{}])[0].get("message",{}).get("content","")
+                        return {"provider": self.name, "model": model,
+                                "latency_ms": int((time.time()-t0)*1000),
+                                "output":{"text": txt}, "error": None}
+                    except Exception as e:
+                        last_err = f"perplexity_error: {type(e).__name__}: {e}"
+                        continue
+
+        return {"provider": self.name, "model": None, "latency_ms": int((time.time()-t0)*1000),
+                "output":{"text":""}, "error": last_err or "perplexity_error: unknown"}
+# END patch: perplexity+grok-live
+
+────────────────────────────────────────────────────────────────────────
+
+C) src/stonecutter/providers/grok_llm.py — real xAI HTTP client (OpenAI‑compatible)
+
+# BEGIN patch: perplexity+grok-live
+import time, httpx
+from ..settings import settings
+
+XAI_URL = "https://api.x.ai/v1/chat/completions"
+
+class GrokProvider:
+    name = "grok"
+
+    async def complete(self, prompt: str, **kw):
+        t0 = time.time()
+        key = settings.xai_api_key
+        if not key:
+            return {"provider": self.name, "model": None, "latency_ms": int((time.time()-t0)*1000),
+                    "error":"grok_error: missing XAI_API_KEY"}
+
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        last_err = None
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            for model in settings.grok_fallbacks:
+                body = {"model": model,
+                        "messages":[{"role":"user","content": prompt[:4000]}],
+                        "temperature":0.2, "max_tokens":256}
+                try:
+                    r = await client.post(XAI_URL, headers=headers, json=body)
+                    if r.status_code != 200:
+                        last_err = f"grok_error: HTTP {r.status_code} {r.text[:140]}"
+                        # Try next fallback if this looks like NotFound/Bad model
+                        if r.status_code in (400,404):
+                            continue
+                        else:
+                            break
+                    data = r.json()
+                    txt = (data.get("choices") or [{}])[0].get("message",{}).get("content","")
+                    return {"provider": self.name, "model": model,
+                            "latency_ms": int((time.time()-t0)*1000),
+                            "output":{"text": txt}, "error": None}
+                except Exception as e:
+                    last_err = f"grok_error: {type(e).__name__}: {e}"
+                    continue
+
+        return {"provider": self.name, "model": None, "latency_ms": int((time.time()-t0)*1000),
+                "output":{"text":""}, "error": last_err or "grok_error: unknown"}
+# END patch: perplexity+grok-live
+
+────────────────────────────────────────────────────────────────────────
+
+D) Provider registry — ensure Grok is loaded when enabled/keyed
+
+# BEGIN patch: perplexity+grok-live
+# Wherever you assemble providers (e.g., src/stonecutter/providers/__init__.py or engine panel loader):
+from ..settings import settings
+
+def load_providers():
+    provs = []
+    # ... your existing providers: OpenAI, Anthropic, Gemini, Perplexity, Mock ...
+    try:
+        from .grok_llm import GrokProvider
+        if settings.enable_grok:
+            provs.append(GrokProvider())
+    except Exception:
+        pass
+    return provs
+# END patch: perplexity+grok-live
+
+────────────────────────────────────────────────────────────────────────
+
+E) README — quick note (append)
+
+# BEGIN patch: perplexity+grok-live
+### Live providers: Perplexity + Grok (xAI)
+- **Perplexity** now tries small → large models and retries with two payload formats to avoid 400s on some tenants.
+- **Grok/xAI** uses OpenAI‑style `POST https://api.x.ai/v1/chat/completions` with `Authorization: Bearer $XAI_API_KEY`.
+- Configure model defaults in `settings.py` (`perplexity_fallbacks`, `grok_fallbacks`).
+- Verify:
+```bash
+pip install -e .
+python scripts/diag_all.py
+
+END patch: perplexity+grok-live
+
+Return only actionable errors if something fails; otherwise print:
+“Perplexity hardened + Grok wired to real API. Re-run: python scripts/diag_all.py”
