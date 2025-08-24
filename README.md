@@ -163,6 +163,15 @@ This project is pinned to commonly available Perplexity models:
 If your account supports additional models, update `perplexity_fallbacks` in `settings.py`.
 # END patch: perplexity-safe-fallbacks
 
+# BEGIN patch: perplexity-mini-fallbacks
+### Perplexity Mini Models
+Perplexity has been configured to use the most widely-available models:
+- `llama-3.1-mini-4k-online` (default)
+- `llama-3.1-mini-128k-online` (fallback)
+
+If your account later gains access to Sonar models, update `perplexity_fallbacks` in `settings.py` accordingly.
+# END patch: perplexity-mini-fallbacks
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.
