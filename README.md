@@ -120,6 +120,14 @@ python scripts/verify_keys.py
 If diag_provider.py shows "model": null with an "openai_error": ..., fix the model name in settings.openai_model or ensure the OpenAI Python client is installed.
 # END fix: openai-live
 
+# BEGIN verify: providers
+### Provider diagnostics
+```bash
+python scripts/diag_all.py
+```
+Expected: each of claude/gemini/perplexity/grok shows LIVE (model + latency) when keys are set, otherwise explicit error text.
+# END verify: providers
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.

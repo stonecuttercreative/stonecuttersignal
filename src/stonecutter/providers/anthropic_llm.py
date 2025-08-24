@@ -30,16 +30,23 @@ class ClaudeProvider:
     name = "claude"
 
     async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        start = time.time()
         # Soft fallback if disabled or no key
         if not settings.enable_claude or not settings.anthropic_api_key or not ANTHROPIC_AVAILABLE:
-            return await mock_complete(self.name, prompt)
+            mock_resp = await mock_complete(self.name, prompt)
+            mock_resp.update({
+                "provider": self.name,
+                "model": None,
+                "latency_ms": int((time.time() - start) * 1000),
+                "error": None if settings.anthropic_api_key else "ANTHROPIC_API_KEY missing or anthropic client not installed",
+            })
+            return mock_resp
 
         # Build wrapped prompt; include distribution_fit only when channels provided
         extra = ', "distribution_fit": int' if ("Channels:" in prompt and "N/A" not in prompt) else ""
         wrapped = PROMPT_WRAPPER.format(extra_score=extra, input_block=prompt)
 
         # Call Claude using the Messages API
-        start = time.time()
         try:
             client = Anthropic(api_key=settings.anthropic_api_key)
             # Claude is not async; run in thread to avoid blocking
@@ -72,7 +79,14 @@ class ClaudeProvider:
                 "output_tokens": getattr(getattr(msg, "usage", None), "output_tokens", None),
             }
             return data
-        except Exception:
-            # Never hard-fail the run; fallback to mock
-            return await mock_complete(self.name, prompt)
+        except Exception as e:
+            # Return mock with explicit error for diagnostics
+            mock_resp = await mock_complete(self.name, prompt)
+            mock_resp.update({
+                "provider": self.name,
+                "model": None,
+                "latency_ms": int((time.time() - start) * 1000),
+                "error": f"anthropic_error: {type(e).__name__}: {e}",
+            })
+            return mock_resp
 # END stonecutter extension

@@ -48,12 +48,15 @@ def surface_telemetry(panel_out: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Extract provider telemetry for inclusion in final results."""
     provider_meta = []
     for r in panel_out:
+        # Check both _telemetry and direct fields for comprehensive error reporting
+        telemetry = r.get("_telemetry") or {}
         meta = {
-            "provider": r.get("_provider_name"),
-            "latency_ms": (r.get("_telemetry") or {}).get("latency_ms"),
-            "model": (r.get("_telemetry") or {}).get("model"),
-            "input_tokens": (r.get("_telemetry") or {}).get("input_tokens"),
-            "output_tokens": (r.get("_telemetry") or {}).get("output_tokens"),
+            "provider": r.get("_provider_name") or r.get("provider"),
+            "latency_ms": telemetry.get("latency_ms") or r.get("latency_ms"),
+            "model": telemetry.get("model") or r.get("model"),
+            "error": telemetry.get("error") or r.get("error"),
+            "input_tokens": telemetry.get("input_tokens"),
+            "output_tokens": telemetry.get("output_tokens"),
         }
         provider_meta.append(meta)
     return provider_meta

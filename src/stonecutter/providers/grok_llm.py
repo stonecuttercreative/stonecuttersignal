@@ -8,22 +8,26 @@ class GrokProvider:
     name = "grok"
 
     async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
-        # Until xAI endpoint is wired, or if key is absent, use safe mock
         start = time.time()
+        
         if not settings.enable_grok or not settings.xai_api_key:
+            # No key present - return mock with appropriate error
             data = await mock_complete(self.name, prompt)
+            data.update({
+                "provider": self.name,
+                "model": None,
+                "latency_ms": int((time.time() - start) * 1000),
+                "error": None if settings.xai_api_key else "XAI_API_KEY missing",
+            })
+            return data
         else:
-            # Placeholder: keep mock for now to avoid hard dependency.
-            # Swap this block to a real httpx call when flipping live.
+            # Key present but real endpoint not implemented yet
             data = await mock_complete(self.name, prompt)
-
-        data.setdefault("_telemetry", {})
-        data["_telemetry"].update({
-            "provider": self.name,
-            "latency_ms": int((time.time() - start) * 1000),
-            "model": settings.grok_model,
-            "input_tokens": None,
-            "output_tokens": None,
-        })
-        return data
+            data.update({
+                "provider": self.name,
+                "model": None,
+                "latency_ms": int((time.time() - start) * 1000),
+                "error": "grok_error: not_implemented - real xAI endpoint not wired",
+            })
+            return data
 # END stonecutter extension: grok provider

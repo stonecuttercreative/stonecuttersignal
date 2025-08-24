@@ -33,14 +33,20 @@ class PerplexityProvider:
     name = "perplexity"
 
     async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        start = time.time()
         # Fallback if disabled or no key
         if not settings.enable_perplexity or not settings.perplexity_api_key or not HTTPX_AVAILABLE:
-            return await mock_complete(self.name, prompt)
+            mock_resp = await mock_complete(self.name, prompt)
+            mock_resp.update({
+                "provider": self.name,
+                "model": None,
+                "latency_ms": int((time.time() - start) * 1000),
+                "error": None if settings.perplexity_api_key else "PERPLEXITY_API_KEY missing or httpx not installed",
+            })
+            return mock_resp
 
         extra = ', "distribution_fit": int' if ("Channels:" in prompt and "N/A" not in prompt) else ""
         wrapped = PROMPT_WRAPPER.format(extra_score=extra, input_block=prompt)
-
-        start = time.time()
         try:
             headers = {
                 "Authorization": f"Bearer {settings.perplexity_api_key}",
@@ -80,7 +86,14 @@ class PerplexityProvider:
             }
             return parsed
 
-        except Exception:
-            # Never hard‑fail—fallback to mock
-            return await mock_complete(self.name, prompt)
+        except Exception as e:
+            # Return mock with explicit error for diagnostics  
+            mock_resp = await mock_complete(self.name, prompt)
+            mock_resp.update({
+                "provider": self.name,
+                "model": None,
+                "latency_ms": int((time.time() - start) * 1000),
+                "error": f"perplexity_error: {type(e).__name__}: {e}",
+            })
+            return mock_resp
 # END stonecutter extension

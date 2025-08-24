@@ -1,0 +1,87 @@
+You are my repo assistant. Do NOT print raw keys. Additive changes only, with markers:
+
+# BEGIN verify: providers
+# END verify: providers
+
+Goal
+Create per-provider smoke tests and harden adapters so that when env keys are present, providers respond LIVE or return an explicit error reason (not silent MOCK).
+
+A) Add scripts/diag_all.py (runs each provider separately + summary)
+
+# BEGIN verify: providers
+import asyncio, json, sys
+from typing import List, Dict, Any
+from stonecutter.engine import run_signal
+
+PROVIDERS = ["claude","gemini","perplexity","grok"]
+
+async def run_once() -> Dict[str, Any]:
+    payload = {"brand":"Diag","category":"Test",
+               "concept":"Sanity check: short, neutral prompt for provider verification.",
+               "channels":"YouTube"}
+    return await run_signal(payload)
+
+def pick(rowlist, name):
+    return next((r for r in rowlist if (r.get("provider","").lower()==name)), None)
+
+async def main():
+    out = await run_once()
+    rows: List[Dict[str,Any]] = out.get("providers") or []
+    print("=== Provider diagnostics ===")
+    ok_all = True
+    for name in PROVIDERS:
+        r = pick(rows, name)
+        if not r:
+            print(f"❌ {name}: not loaded into panel (check enable_* toggle / registry).")
+            ok_all = False
+            continue
+        mode = "LIVE" if r.get("model") else "MOCK"
+        err  = r.get("error")
+        lat  = r.get("latency_ms")
+        print(f"{'✅' if r.get('model') else '❌'} {name:<11} mode={mode} model={r.get('model')} latency_ms={lat} error={err}")
+        if r.get("model") is None and err:
+            ok_all = False
+    # Exit non-zero if any provider with a key is not LIVE (verify_keys.py handles env presence)
+    sys.exit(0 if ok_all else 2)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+# END verify: providers
+
+B) Tighten provider adapters to surface explicit error reasons (no silent fallbacks).
+
+1) Anthropic (Claude): src/stonecutter/providers/anthropic_llm.py
+- Use anthropic SDK, read env ANTROPHIC_API_KEY/ANTHROPIC_API_KEY -> normalize to ANTHROPIC_API_KEY
+- Set model from settings.claude_model
+- On exception, return {"provider","model":None,"error":"anthropic_error: ...","latency_ms":...}
+
+2) Google Gemini: src/stonecutter/providers/gemini_llm.py
+- Use google-generativeai, key from GOOGLE_GENAI_API_KEY
+- Model from settings.gemini_model (default "gemini-1.5-pro")
+- On exception, return error string "gemini_error: ..."
+
+3) Perplexity: src/stonecutter/providers/perplexity_llm.py
+- HTTP POST to https://api.perplexity.ai/chat/completions
+- Headers: Authorization: Bearer {PERPLEXITY_API_KEY}, Content-Type: application/json
+- JSON: {"model": settings.perplexity_model, "messages":[{"role":"user","content": prompt[:4000]}]}
+- On exception or non-200, return "perplexity_error: <status or exception>"
+
+4) Grok (xAI): src/stonecutter/providers/grok_llm.py
+- If real xAI endpoint is not wired, keep current behavior but include clear "grok_stub" or "grok_error: not_implemented" when key present but no call is made, so diagnostics are honest.
+
+Ensure each provider returns a telemetry dict with:
+{"provider","model" (None if fallback),"latency_ms","error" or None}
+
+C) Normalize env names in settings once to avoid typos:
+- settings.py: already maps
+  ANTHROPIC_API_KEY, GOOGLE_GENAI_API_KEY, PERPLEXITY_API_KEY, XAI_API_KEY
+- If code references GEMINI_API_KEY or PPLX_API_KEY anywhere, replace to match the above.
+
+D) Add README quick step
+- New command:
+```bash
+python scripts/diag_all.py
+
+	•	Expected: each of claude/gemini/perplexity/grok shows LIVE (model + latency) when keys are set, otherwise explicit error text.
+
+Return only actionable errors; otherwise print: “Per-provider diagnostics ready. Run: python scripts/diag_all.py”
