@@ -74,26 +74,22 @@ Open the dashboard at http://localhost:8000/ to view the populated results.
 - /metrics/latest → Radar for most recent run
 - /metrics/activity → Activity over last 30 days
 
-# BEGIN stonecutter live: README keys
-## Configuring API Keys (Replit)
-Open **Tools → Secrets** and add these keys (values are the raw API keys, no quotes):
+# BEGIN stonecutter secure-keys
+## Add API keys securely (Replit → Tools → Secrets)
+Create these secrets (values = your raw keys; no quotes):
 - OPENAI_API_KEY
 - ANTHROPIC_API_KEY
 - GOOGLE_GENAI_API_KEY
 - PERPLEXITY_API_KEY
-- XAI_API_KEY   # Grok (stub until xAI endpoint wired)
-(Optional) News feed:
-- NEWSAPI_KEY
+- XAI_API_KEY   # Grok (stub until xAI endpoint is live)
 
-If a key is missing, that provider runs in MOCK mode and the pipeline still completes.
-
-### Verify providers
+Verify:
 ```bash
 pip install -e .
 python providers_health.py
-# and visit /health/providers in the dashboard
+# and open /health/providers
 ```
-# END stonecutter live: README keys
+# END stonecutter secure-keys
 
 ## Architecture
 

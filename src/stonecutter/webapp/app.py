@@ -344,7 +344,7 @@ def metrics_providers():
                 latency = provider.get("latency_ms", 0)
                 is_mock = provider.get("is_mock", False)
                 
-                if latency > 0:
+                if latency and latency > 0:
                     provider_stats[name]["latency_sum"] += latency
                     provider_stats[name]["latency_count"] += 1
                 
@@ -368,7 +368,7 @@ def metrics_providers():
     
     return {"providers": providers}
 
-# BEGIN stonecutter live: providers health endpoint
+# BEGIN stonecutter secure-keys
 import os
 from ..settings import settings
 
@@ -376,13 +376,8 @@ from ..settings import settings
 def providers_health():
     def row(name, enabled, key_env, model):
         key_ok = bool(os.environ.get(key_env) or getattr(settings, key_env.lower(), None))
-        return {
-            "provider": name,
-            "enabled": bool(enabled),
-            "key_present": bool(key_ok),
-            "model": model,
-            "expected_mode": "LIVE" if (enabled and key_ok) else "MOCK"
-        }
+        return {"provider": name, "enabled": bool(enabled), "key_present": bool(key_ok),
+                "model": model, "expected_mode": "LIVE" if (enabled and key_ok) else "MOCK"}
     return {"providers": [
         row("openai", settings.enable_openai, "OPENAI_API_KEY", settings.openai_model),
         row("claude", settings.enable_claude, "ANTHROPIC_API_KEY", settings.claude_model),
@@ -390,7 +385,7 @@ def providers_health():
         row("perplexity", settings.enable_perplexity, "PERPLEXITY_API_KEY", settings.perplexity_model),
         row("grok", settings.enable_grok, "XAI_API_KEY", settings.grok_model),
     ]}
-# END stonecutter live: providers health endpoint
+# END stonecutter secure-keys
 # END stonecutter extension: visuals
 
 # END stonecutter extension
