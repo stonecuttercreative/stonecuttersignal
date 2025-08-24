@@ -1,86 +1,30 @@
-# BEGIN stonecutter extension: real Gemini provider
-from typing import Dict, Any
-import json, asyncio, time
+# BEGIN composite: env+providers
+import time
 try:
     import google.generativeai as genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
 from ..settings import settings
-from ._mock_util import mock_complete
-
-PROMPT_WRAPPER = """You are a cultural diagnostics analyst.
-Return STRICT JSON ONLY, no prose.
-JSON schema:
-{{
-  "cluster": str,
-  "archetype": str,
-  "story": str,
-  "scores": {{
-    "cultural_fit": int, "clarity": int, "emotional_resonance": int,
-    "differentiation": int, "conversation_fit": int{extra_score}
-  }},
-  "claims": [str, str, str]
-}}
-Input:
-{input_block}
-"""
 
 class GeminiProvider:
     name = "gemini"
 
-    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
-        start = time.time()
-        if not settings.enable_gemini or not settings.google_genai_key or not GEMINI_AVAILABLE:
-            mock_resp = await mock_complete(self.name, prompt)
-            mock_resp.update({
-                "provider": self.name,
-                "model": None,
-                "latency_ms": int((time.time() - start) * 1000),
-                "error": None if settings.google_genai_key else "GOOGLE_GENAI_API_KEY missing or google-generativeai not installed",
-            })
-            return mock_resp
-
-        extra = ', "distribution_fit": int' if ("Channels:" in prompt and "N/A" not in prompt) else ""
-        wrapped = PROMPT_WRAPPER.format(extra_score=extra, input_block=prompt)
-        try:
-            # Configure once per call (simple + safe here)
-            genai.configure(api_key=settings.google_genai_key)
-
-            # Gemini SDK is sync-ish; use thread executor to avoid blocking
-            def _call():
-                model = genai.GenerativeModel(settings.gemini_model)
-                # We ask for JSON; some SDKs need a system prompt or MIME. Keep simple here.
-                resp = model.generate_content(wrapped)
-                # Extract plain text
-                return resp.text if hasattr(resp, "text") else str(resp)
-
-            loop = asyncio.get_running_loop()
-            text = await loop.run_in_executor(None, _call)
-
+    async def complete(self, prompt: str, **kw):
+        t0=time.time()
+        key = settings.google_genai_key
+        if not settings.enable_gemini or not key or not GEMINI_AVAILABLE:
+            return {"provider": self.name, "model": None, "latency_ms": int((time.time()-t0)*1000), "error":"gemini_error: missing GOOGLE_GENAI_API_KEY/GOOGLE_API_KEY or google-generativeai not installed"}
+        genai.configure(api_key=key)
+        last_err=None
+        for model in settings.gemini_fallbacks:
             try:
-                data = json.loads(text)
-            except Exception:
-                # If parsing fails (model added prose), fallback to mock to keep pipeline stable
-                return await mock_complete(self.name, prompt)
-
-            data["_telemetry"] = {
-                "provider": self.name,
-                "latency_ms": int((time.time() - start) * 1000),
-                "model": settings.gemini_model,
-                # Gemini SDK may not expose token counts here; leave None
-                "input_tokens": None,
-                "output_tokens": None,
-            }
-            return data
-        except Exception as e:
-            # Return mock with explicit error for diagnostics
-            mock_resp = await mock_complete(self.name, prompt)
-            mock_resp.update({
-                "provider": self.name,
-                "model": None,
-                "latency_ms": int((time.time() - start) * 1000),
-                "error": f"gemini_error: {type(e).__name__}: {e}",
-            })
-            return mock_resp
-# END stonecutter extension
+                m = genai.GenerativeModel(model)
+                resp = m.generate_content(prompt[:4000])
+                txt = resp.text or ""
+                return {"provider": self.name, "model": model, "latency_ms": int((time.time()-t0)*1000), "output":{"text":txt}, "error": None}
+            except Exception as e:
+                last_err=f"gemini_error: {type(e).__name__}: {e}"
+                continue
+        return {"provider": self.name, "model": None, "latency_ms": int((time.time()-t0)*1000), "output":{"text":""}, "error": last_err or "gemini_error: unknown"}
+# END composite: env+providers

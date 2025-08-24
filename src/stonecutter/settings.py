@@ -1,10 +1,12 @@
-# BEGIN stonecutter extension
+# BEGIN composite: env+providers
+import os
 from typing import Optional
 try:
     from pydantic import BaseSettings, Field
 except ImportError:
     from pydantic_settings import BaseSettings
     from pydantic import Field
+# END composite: env+providers
 
 class Settings(BaseSettings):
     mode: str = "realtime"
@@ -16,13 +18,13 @@ class Settings(BaseSettings):
     feature_reddit_off: bool = True
     feature_tiktok_off: bool = True
 
-# BEGIN stonecutter secure-keys
-    # Provider keys (all optional; fallback to mock if missing)
+# BEGIN composite: env+providers
+    # Provider keys with env aliases + fallback chains
     openai_api_key: str | None = Field(default=None, env="OPENAI_API_KEY")
-    anthropic_api_key: str | None = Field(default=None, env="ANTHROPIC_API_KEY")
-    google_genai_key: str | None = Field(default=None, env="GOOGLE_GENAI_API_KEY")
-    perplexity_api_key: str | None = Field(default=None, env="PERPLEXITY_API_KEY")
-    xai_api_key: str | None = Field(default=None, env="XAI_API_KEY")
+    anthropic_api_key: str | None = Field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY"))
+    google_genai_key: str | None = Field(default_factory=lambda: os.getenv("GOOGLE_GENAI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+    perplexity_api_key: str | None = Field(default_factory=lambda: os.getenv("PERPLEXITY_API_KEY"))
+    xai_api_key: str | None = Field(default_factory=lambda: os.getenv("XAI_API_KEY"))
 
     openai_model: str = "gpt-4o-mini"
     claude_model: str = "claude-3-5-sonnet-20240620"
@@ -30,13 +32,17 @@ class Settings(BaseSettings):
     perplexity_model: str = "llama-3.1-sonar-large-32k-online"
     grok_model: str = "grok-2-1212"
 
+    claude_fallbacks: list[str] = ["claude-3-5-sonnet-20240620","claude-3-haiku-20240307","claude-2.1"]
+    gemini_fallbacks: list[str] = ["gemini-1.5-pro","gemini-1.5-flash","gemini-pro"]
+    perplexity_fallbacks: list[str] = ["llama-3.1-sonar-large-32k-online","llama-3.1-sonar-small-128k-online","llama-3.1-mini-4k-online"]
+
     enable_openai: bool = True
     enable_claude: bool = True
     enable_gemini: bool = True
     enable_perplexity: bool = True
     enable_grok: bool = True
     enable_mistral: bool = True
-# END stonecutter secure-keys
+# END composite: env+providers
 
     # Data layers
     newsapi_key: str | None = Field(default=None, env="NEWSAPI_KEY")

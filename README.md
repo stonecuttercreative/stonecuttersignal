@@ -128,6 +128,20 @@ python scripts/diag_all.py
 Expected: each of claude/gemini/perplexity/grok shows LIVE (model + latency) when keys are set, otherwise explicit error text.
 # END verify: providers
 
+# BEGIN composite: env+providers
+### Quick env + SDK check
+```bash
+python scripts/check_env_sdks.py
+```
+Verify providers:
+```bash
+pip install -e .
+python scripts/diag_all.py
+```
+- Each provider shows ✅ LIVE with model + latency if key and SDK are correct.
+- If a provider fails, you'll see explicit *_error: text (missing key, model not found, HTTP error).
+# END composite: env+providers
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.

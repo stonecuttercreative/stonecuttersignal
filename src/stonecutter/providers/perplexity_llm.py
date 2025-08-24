@@ -1,99 +1,38 @@
-# BEGIN stonecutter extension: real Perplexity provider
-from typing import Dict, Any
-import json, asyncio, time
+# BEGIN composite: env+providers
+import time
 try:
     import httpx
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
 from ..settings import settings
-from ._mock_util import mock_complete
 
-PROMPT_WRAPPER = """You are a cultural diagnostics analyst.
-Return STRICT JSON ONLY, no prose.
-JSON schema:
-{{
-  "cluster": str,
-  "archetype": str,
-  "story": str,
-  "scores": {{
-    "cultural_fit": int, "clarity": int, "emotional_resonance": int,
-    "differentiation": int, "conversation_fit": int{extra_score}
-  }},
-  "claims": [str, str, str]
-}}
-If you cite sources, DO NOT include prose—just produce the JSON.
-Input:
-{input_block}
-"""
-
-API_URL = "https://api.perplexity.ai/chat/completions"
+PPLX_URL = "https://api.perplexity.ai/chat/completions"
 
 class PerplexityProvider:
     name = "perplexity"
 
-    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
-        start = time.time()
-        # Fallback if disabled or no key
-        if not settings.enable_perplexity or not settings.perplexity_api_key or not HTTPX_AVAILABLE:
-            mock_resp = await mock_complete(self.name, prompt)
-            mock_resp.update({
-                "provider": self.name,
-                "model": None,
-                "latency_ms": int((time.time() - start) * 1000),
-                "error": None if settings.perplexity_api_key else "PERPLEXITY_API_KEY missing or httpx not installed",
-            })
-            return mock_resp
+    async def complete(self, prompt: str, **kw):
+        t0=time.time()
+        key = settings.perplexity_api_key
+        if not settings.enable_perplexity or not key or not HTTPX_AVAILABLE:
+            return {"provider": self.name, "model": None, "latency_ms": int((time.time()-t0)*1000), "error":"perplexity_error: missing PERPLEXITY_API_KEY or httpx not installed"}
 
-        extra = ', "distribution_fit": int' if ("Channels:" in prompt and "N/A" not in prompt) else ""
-        wrapped = PROMPT_WRAPPER.format(extra_score=extra, input_block=prompt)
-        try:
-            headers = {
-                "Authorization": f"Bearer {settings.perplexity_api_key}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "model": settings.perplexity_model,
-                "messages": [
-                    {"role": "system", "content": "Answer with strict JSON only."},
-                    {"role": "user", "content": wrapped}
-                ],
-                "temperature": 0.4,
-                "stream": False
-            }
-
-            # Use async client
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(API_URL, headers=headers, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-
-            # Perplexity returns OpenAI-style choices
-            text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            try:
-                parsed = json.loads(text)
-            except Exception:
-                # If model added extra prose, keep run stable via mock
-                return await mock_complete(self.name, prompt)
-
-            parsed["_telemetry"] = {
-                "provider": self.name,
-                "latency_ms": int((time.time() - start) * 1000),
-                "model": settings.perplexity_model,
-                # Perplexity may not return token counts consistently; leave None
-                "input_tokens": None,
-                "output_tokens": None,
-            }
-            return parsed
-
-        except Exception as e:
-            # Return mock with explicit error for diagnostics  
-            mock_resp = await mock_complete(self.name, prompt)
-            mock_resp.update({
-                "provider": self.name,
-                "model": None,
-                "latency_ms": int((time.time() - start) * 1000),
-                "error": f"perplexity_error: {type(e).__name__}: {e}",
-            })
-            return mock_resp
-# END stonecutter extension
+        headers={"Authorization": f"Bearer {key}", "Content-Type":"application/json"}
+        last_err=None
+        async with httpx.AsyncClient(timeout=20) as client:
+            for model in settings.perplexity_fallbacks:
+                try:
+                    body={"model": model, "messages":[{"role":"user","content": prompt[:4000]}], "temperature":0.2, "max_tokens":256}
+                    r = await client.post(PPLX_URL, headers=headers, json=body)
+                    if r.status_code != 200:
+                        last_err = f"perplexity_error: HTTP {r.status_code} {r.text[:120]}"
+                        continue
+                    data=r.json()
+                    txt = data.get("choices",[{}])[0].get("message",{}).get("content","")
+                    return {"provider": self.name, "model": model, "latency_ms": int((time.time()-t0)*1000), "output":{"text":txt}, "error": None}
+                except Exception as e:
+                    last_err=f"perplexity_error: {type(e).__name__}: {e}"
+                    continue
+        return {"provider": self.name, "model": None, "latency_ms": int((time.time()-t0)*1000), "output":{"text":""}, "error": last_err or "perplexity_error: unknown"}
+# END composite: env+providers
