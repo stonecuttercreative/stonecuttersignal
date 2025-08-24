@@ -108,6 +108,18 @@ python scripts/verify_keys.py
 - Exit code 0 = all keyed providers responded LIVE. Exit code 2 = at least one keyed provider didn't respond LIVE.
 # END stonecutter verify-keys
 
+# BEGIN fix: openai-live
+### Make OpenAI go LIVE
+1) In Replit → Tools → Secrets add `OPENAI_API_KEY` (no quotes).
+2) Verify:
+```bash
+pip install -e .
+python scripts/diag_provider.py openai
+python scripts/verify_keys.py
+```
+If diag_provider.py shows "model": null with an "openai_error": ..., fix the model name in settings.openai_model or ensure the OpenAI Python client is installed.
+# END fix: openai-live
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.

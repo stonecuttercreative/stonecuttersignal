@@ -7,24 +7,41 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# BEGIN fix: openai-live
 async def _run_panel(prompt: str) -> List[Dict[str, Any]]:
     panel = load_panel()
     async def call(m):
+        import time
+        t0 = time.time()
         try:
             out = await m.complete(prompt)
-            # BEGIN stonecutter extension: provider tag
+            # Normalize telemetry fields
             out["_provider_name"] = getattr(m, "name", "unknown")
-            # END stonecutter extension
+            out["_telemetry"] = {
+                "model": out.get("model"),
+                "latency_ms": out.get("latency_ms", int((time.time() - t0) * 1000)),
+                "error": out.get("error"),
+                "provider": out.get("provider", getattr(m, "name", "unknown"))
+            }
             return out
         except Exception as e:
             logger.warning(f"Provider failed: {getattr(m,'name','unknown')} -> {e}")
-            return {"_provider_name": getattr(m,"name","unknown"),
-                    "cluster":"General Clarity","archetype":"Guide","story":"",
-                    "scores":{"cultural_fit":50,"clarity":50,"emotional_resonance":50,
-                              "differentiation":50,"conversation_fit":50},
-                    "claims":["Provider error fallback"]}
+            return {
+                "_provider_name": getattr(m,"name","unknown"),
+                "_telemetry": {
+                    "model": None,
+                    "latency_ms": int((time.time() - t0) * 1000),
+                    "error": f"provider_error: {type(e).__name__}: {e}",
+                    "provider": getattr(m,"name","unknown")
+                },
+                "cluster":"General Clarity","archetype":"Guide","story":"",
+                "scores":{"cultural_fit":50,"clarity":50,"emotional_resonance":50,
+                          "differentiation":50,"conversation_fit":50},
+                "claims":["Provider error fallback"]
+            }
     tasks = [call(m) for m in panel]
     return await asyncio.gather(*tasks)
+# END fix: openai-live
 
 # BEGIN stonecutter extension: telemetry bubble-up
 def surface_telemetry(panel_out: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

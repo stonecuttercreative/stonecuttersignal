@@ -1,0 +1,166 @@
+You are my repo assistant. Do NOT remove files. Make minimal, targeted edits with markers:
+
+# BEGIN fix: openai-live
+# END fix: openai-live
+
+GOALS
+1) Ensure OpenAI provider uses env var OPENAI_API_KEY and settings.openai_model, and only falls back to MOCK on real errors.
+2) Surface provider mode, model, and any error reason in telemetry so verify_keys can show why a provider fell back.
+3) Add a small diag script to test a single provider in isolation.
+
+A) settings.py — confirm toggles and defaults exist (append if missing)
+# BEGIN fix: openai-live
+from pydantic import Field
+class Settings(BaseSettings):
+    openai_api_key: str | None = Field(default=None, env="OPENAI_API_KEY")
+    openai_model: str = "gpt-4o-mini"
+    enable_openai: bool = True
+# END fix: openai-live
+
+B) OpenAI provider implementation
+Open or create: src/stonecutter/providers/openai_llm.py
+Implement an async provider that:
+- reads key from settings.openai_api_key
+- uses model from settings.openai_model
+- returns {"provider","model","latency_ms","output", ...}
+- on exceptions, returns a MOCK-like response but includes an "error" field with the exception summary
+
+# BEGIN fix: openai-live
+import time
+from typing import Dict, Any
+from ..settings import settings
+
+try:
+    # Support either new OpenAI client or legacy import; prefer new
+    from openai import OpenAI
+    _OPENAI_AVAILABLE = True
+except Exception:
+    _OPENAI_AVAILABLE = False
+
+class OpenAIProvider:
+    name = "openai"
+
+    async def complete(self, prompt: str, **kw) -> Dict[str, Any]:
+        t0 = time.time()
+        key = settings.openai_api_key
+        model = settings.openai_model
+        if not settings.enable_openai or not key or not _OPENAI_AVAILABLE:
+            # MOCK path
+            return {
+                "provider": self.name,
+                "model": None,
+                "latency_ms": int((time.time() - t0) * 1000),
+                "output": {"story": "mock"},
+                "error": None if key else "OPENAI_API_KEY missing or OpenAI client not installed",
+            }
+        try:
+            client = OpenAI(api_key=key)
+            # Use a small, safe call; adapt to your JSON protocol upstream
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt[:4000]}],
+                temperature=0.2,
+                max_tokens=256,
+            )
+            txt = resp.choices[0].message.content if resp and resp.choices else ""
+            return {
+                "provider": self.name,
+                "model": model,
+                "latency_ms": int((time.time() - t0) * 1000),
+                "output": {"text": txt},
+                "error": None,
+            }
+        except Exception as e:
+            # Fallback but keep reason visible
+            return {
+                "provider": self.name,
+                "model": None,
+                "latency_ms": int((time.time() - t0) * 1000),
+                "output": {"story": "mock"},
+                "error": f"openai_error: {type(e).__name__}: {e}",
+            }
+# END fix: openai-live
+
+C) Provider registry — include OpenAI when enabled
+Open src/stonecutter/providers/__init__.py (or the file that builds the provider list) and ensure OpenAIProvider is appended when settings.enable_openai is True.
+
+# BEGIN fix: openai-live
+def load_providers():
+    provs = []
+    # ... existing providers (Claude, Gemini, Perplexity, Grok, mocks) ...
+    try:
+        from .openai_llm import OpenAIProvider
+        if settings.enable_openai:
+            provs.append(OpenAIProvider())
+    except Exception:
+        pass
+    return provs
+# END fix: openai-live
+
+D) Engine panel — propagate provider telemetry (model, latency_ms, error) into the run output
+Open src/stonecutter/engine.py and in the code that aggregates provider responses, ensure each response dict keeps:
+- provider name
+- model (None if mock/fallback)
+- latency_ms
+- error (if any)
+
+If needed, wrap each provider call to add timing and normalize fields.
+
+# BEGIN fix: openai-live
+# Example normalization inside panel gather loop:
+def _norm_resp(name, r, started_ms, model_hint=None):
+    import time
+    lat = int((time.time() - started_ms) * 1000)
+    return {
+        "provider": name,
+        "model": r.get("model") or model_hint,
+        "latency_ms": r.get("latency_ms", lat),
+        "error": r.get("error"),
+        **{k: v for k, v in r.items() if k not in ("provider","model","latency_ms","error")}
+    }
+# END fix: openai-live
+
+E) Add a single-provider diag script
+Create scripts/diag_provider.py to test only OpenAI (or any provider by name) and print the reason if it falls back.
+
+# BEGIN fix: openai-live
+import asyncio, time, sys, json
+from stonecutter.engine import run_signal
+
+async def main():
+    name = (sys.argv[1] if len(sys.argv) > 1 else "openai").lower()
+    out = await run_signal({"brand":"Diag","category":"Test","concept":"Short sanity check."})
+    rows = out.get("providers") or []
+    row = next((r for r in rows if (r.get("provider","").lower()==name)), None)
+    if not row:
+        print(f"Provider '{name}' not found in run. Loaded providers: {[r.get('provider') for r in rows]}")
+        sys.exit(2)
+    print(json.dumps(row, ensure_ascii=False, indent=2))
+    # exit non-zero if expected LIVE provider has no model
+    live_expected = name in ("openai","claude","gemini","perplexity","grok")
+    sys.exit(0 if (not live_expected or row.get("model")) else 3)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+# END fix: openai-live
+
+F) README — quick instructions
+# BEGIN fix: openai-live
+### Make OpenAI go LIVE
+1) In Replit → Tools → Secrets add `OPENAI_API_KEY` (no quotes).
+2) Verify:
+```bash
+pip install -e .
+python scripts/diag_provider.py openai
+python scripts/verify_keys.py
+
+If diag_provider.py shows "model": null with an "openai_error": ..., fix the model name in settings.openai_model or ensure the OpenAI Python client is installed.
+
+END fix: openai-live
+
+G) Dependencies
+Ensure pyproject.toml includes openai>=1.40.0 (or latest available). If missing, append and run:
+
+pip install -e .
+
+Return only errors if any; otherwise print: “OpenAI provider fixed and LIVE diagnostics enabled.”
