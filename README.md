@@ -91,6 +91,23 @@ python providers_health.py
 ```
 # END stonecutter secure-keys
 
+# BEGIN stonecutter verify-keys
+### Verify your API keys & live providers
+1. In Replit → **Tools → Secrets**, add keys (values = raw keys, no quotes):
+   - ANTHROPIC_API_KEY
+   - GOOGLE_GENAI_API_KEY
+   - PERPLEXITY_API_KEY
+   - XAI_API_KEY   *(Grok; may be stub until wired)*
+   - (optional) OPENAI_API_KEY
+2. Run the verifier:
+```bash
+pip install -e .
+python scripts/verify_keys.py
+```
+- The script checks env presence, runs a small ensemble, and prints each provider's expected vs actual mode with model + latency.
+- Exit code 0 = all keyed providers responded LIVE. Exit code 2 = at least one keyed provider didn't respond LIVE.
+# END stonecutter verify-keys
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.
