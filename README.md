@@ -154,6 +154,15 @@ python scripts/diag_all.py
 ```
 # END patch: perplexity+grok-live
 
+# BEGIN patch: perplexity-safe-fallbacks
+### Perplexity safe models
+This project is pinned to commonly available Perplexity models:
+- `llama-3.1-mini-4k-online` (default)
+- `llama-3.1-sonar-small-128k-online` (fallback)
+
+If your account supports additional models, update `perplexity_fallbacks` in `settings.py`.
+# END patch: perplexity-safe-fallbacks
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.

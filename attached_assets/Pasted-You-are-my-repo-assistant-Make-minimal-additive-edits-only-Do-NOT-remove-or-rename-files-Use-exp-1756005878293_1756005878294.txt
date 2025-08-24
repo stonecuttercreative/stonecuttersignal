@@ -1,10 +1,33 @@
+You are my repo assistant. Make minimal, additive edits only. Do NOT remove or rename files. Use explicit markers.
+
 # BEGIN patch: perplexity-safe-fallbacks
-import time
-try:
-    import httpx
-    HTTPX_AVAILABLE = True
-except ImportError:
-    HTTPX_AVAILABLE = False
+# END patch: perplexity-safe-fallbacks
+
+GOAL
+Lock Perplexity to “safe” models commonly enabled on most accounts and stop cycling through models your tenant likely doesn’t have. Keep explicit error messages (no silent mocks).
+
+A) Update safe fallback list in src/stonecutter/settings.py
+- Prefer smaller models first; keep list short and deterministic.
+
+# BEGIN patch: perplexity-safe-fallbacks
+from pydantic import Field
+
+class Settings(BaseSettings):
+    # … keep existing fields …
+
+    # Perplexity: prefer widely-available models first
+    perplexity_model: str = "llama-3.1-mini-4k-online"
+    perplexity_fallbacks: list[str] = [
+        "llama-3.1-mini-4k-online",
+        "llama-3.1-sonar-small-128k-online",
+    ]
+# END patch: perplexity-safe-fallbacks
+
+B) Tighten Perplexity adapter to stop on first success and return clear 400/403/404 reasons.
+Edit src/stonecutter/providers/perplexity_llm.py – replace the complete() body with:
+
+# BEGIN patch: perplexity-safe-fallbacks
+import time, httpx
 from ..settings import settings
 
 PPLX_URL = "https://api.perplexity.ai/chat/completions"
@@ -15,11 +38,11 @@ class PerplexityProvider:
     async def complete(self, prompt: str, **kw):
         t0 = time.time()
         key = settings.perplexity_api_key
-        if not settings.enable_perplexity or not key or not HTTPX_AVAILABLE:
+        if not key:
             return {
                 "provider": self.name, "model": None,
                 "latency_ms": int((time.time()-t0)*1000),
-                "error":"perplexity_error: missing PERPLEXITY_API_KEY or httpx not installed"
+                "error":"perplexity_error: missing PERPLEXITY_API_KEY"
             }
 
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
@@ -58,3 +81,21 @@ class PerplexityProvider:
             "error": last_err or "perplexity_error: unknown"
         }
 # END patch: perplexity-safe-fallbacks
+
+C) README note (append)
+
+# BEGIN patch: perplexity-safe-fallbacks
+### Perplexity safe models
+This project is pinned to commonly available Perplexity models:
+- `llama-3.1-mini-4k-online` (default)
+- `llama-3.1-sonar-small-128k-online` (fallback)
+
+If your account supports additional models, update `perplexity_fallbacks` in `settings.py`.
+# END patch: perplexity-safe-fallbacks
+
+After applying, run:
+1) `pip install -e .`
+2) `python scripts/diag_all.py`
+
+Expected: Perplexity shows ✅ LIVE on one of the safe models with latency and no error.
+If it still fails, the `perplexity_error:` text will be explicit (auth vs model vs payload), paste that single line to debug next.
