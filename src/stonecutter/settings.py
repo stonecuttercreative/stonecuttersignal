@@ -16,30 +16,38 @@ class Settings(BaseSettings):
     feature_reddit_off: bool = True
     feature_tiktok_off: bool = True
 
-    # Provider keys (optional)
-    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
-    anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
-    google_genai_key: Optional[str] = Field(default=None, env="GOOGLE_GENAI_API_KEY")
-    xai_api_key: Optional[str] = Field(default=None, env="XAI_API_KEY")  # Grok
-    perplexity_api_key: Optional[str] = Field(default=None, env="PERPLEXITY_API_KEY")
-    mistral_api_key: Optional[str] = Field(default=None, env="MISTRAL_API_KEY")
+# BEGIN stonecutter live: provider settings
+    # Provider keys (all optional; fallback to mock if missing)
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    google_genai_key: str | None = Field(default=None, alias="GOOGLE_GENAI_API_KEY")
+    perplexity_api_key: str | None = Field(default=None, alias="PERPLEXITY_API_KEY")
+    xai_api_key: str | None = Field(default=None, alias="XAI_API_KEY")  # Grok stub
 
-    # BEGIN stonecutter extension: claude settings
-    claude_model: str = "claude-3-5-sonnet-20240620"  # adjust if needed
-    # END stonecutter extension
+    # Default models
+    openai_model: str = "gpt-4o-mini"
+    claude_model: str = "claude-3-5-sonnet-20240620"
+    gemini_model: str = "gemini-1.5-pro"
+    perplexity_model: str = "llama-3.1-sonar-large-32k-online"
+    grok_model: str = "grok-2-1212"
 
-    # BEGIN stonecutter extension: gemini settings
-    gemini_model: str = "gemini-1.5-pro"  # adjust if you prefer 'gemini-1.5-flash'
-    # END stonecutter extension
-
-    # BEGIN stonecutter extension: perplexity settings
-    perplexity_model: str = "llama-3.1-sonar-large-32k-online"  # adjust if needed
-    # END stonecutter extension
-
-    # BEGIN stonecutter extension: grok
-    grok_model: str = "grok-2-1212"  # placeholder; adjust when live
+    # Toggles
+    enable_openai: bool = True
+    enable_claude: bool = True
+    enable_gemini: bool = True
+    enable_perplexity: bool = True
     enable_grok: bool = True
-    # END stonecutter extension: grok
+
+    # Data layers
+    newsapi_key: str | None = Field(default=None, alias="NEWSAPI_KEY")
+    enable_newsapi: bool = True
+    enable_gdelt: bool = True
+    evidence_max_items: int = 6
+
+    # HTTP timeout for external calls
+    http_timeout_s: int = 18
+# END stonecutter live: provider settings
+
 
     # BEGIN stonecutter extension: persistence paths
     persistence_enabled: bool = True

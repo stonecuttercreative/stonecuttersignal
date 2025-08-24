@@ -65,6 +65,12 @@ def init_db():
             is_mock INTEGER
         )""")
         
+# BEGIN stonecutter live: evidence table
+        cur.execute("""CREATE TABLE IF NOT EXISTS evidence(
+            run_id TEXT, provider TEXT, title TEXT, url TEXT, snippet TEXT, source TEXT
+        )""")
+# END stonecutter live: evidence table
+        
         logger.info(f"Database initialized at {settings.db_path}")
         return _CONN
         
@@ -238,4 +244,16 @@ def get_run_details(run_id: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"[persistence] get_run_details failed: {e}")
         return None
+
+# BEGIN stonecutter live: evidence table
+def save_evidence(run_id: str, items: list[dict]):
+    if not items: return
+    conn = init_db(); cur = conn.cursor()
+    for e in items:
+        cur.execute("""INSERT INTO evidence(run_id, provider, title, url, snippet, source)
+                       VALUES(?,?,?,?,?,?)""",
+                    (run_id, e.get("provider"), e.get("title"),
+                     e.get("url"), e.get("snippet"), e.get("source")))
+# END stonecutter live: evidence table
+
 # END stonecutter extension: sqlite harden

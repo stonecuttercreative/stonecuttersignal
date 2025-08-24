@@ -230,7 +230,8 @@ async def dashboard_home():
                 <a href="/metrics/providers">Providers</a> |
                 <a href="/metrics/distribution">Distribution</a> |
                 <a href="/metrics/latest">Latest</a> |
-                <a href="/metrics/activity">Activity</a>
+                <a href="/metrics/activity">Activity</a> |
+                <a href="/health/providers">Provider Health</a>
             </small></p>
         </body>
         </html>
@@ -366,6 +367,30 @@ def metrics_providers():
         })
     
     return {"providers": providers}
+
+# BEGIN stonecutter live: providers health endpoint
+import os
+from ..settings import settings
+
+@app.get("/health/providers")
+def providers_health():
+    def row(name, enabled, key_env, model):
+        key_ok = bool(os.environ.get(key_env) or getattr(settings, key_env.lower(), None))
+        return {
+            "provider": name,
+            "enabled": bool(enabled),
+            "key_present": bool(key_ok),
+            "model": model,
+            "expected_mode": "LIVE" if (enabled and key_ok) else "MOCK"
+        }
+    return {"providers": [
+        row("openai", settings.enable_openai, "OPENAI_API_KEY", settings.openai_model),
+        row("claude", settings.enable_claude, "ANTHROPIC_API_KEY", settings.claude_model),
+        row("gemini", settings.enable_gemini, "GOOGLE_GENAI_API_KEY", settings.gemini_model),
+        row("perplexity", settings.enable_perplexity, "PERPLEXITY_API_KEY", settings.perplexity_model),
+        row("grok", settings.enable_grok, "XAI_API_KEY", settings.grok_model),
+    ]}
+# END stonecutter live: providers health endpoint
 # END stonecutter extension: visuals
 
 # END stonecutter extension

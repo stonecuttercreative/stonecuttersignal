@@ -74,6 +74,27 @@ Open the dashboard at http://localhost:8000/ to view the populated results.
 - /metrics/latest → Radar for most recent run
 - /metrics/activity → Activity over last 30 days
 
+# BEGIN stonecutter live: README keys
+## Configuring API Keys (Replit)
+Open **Tools → Secrets** and add these keys (values are the raw API keys, no quotes):
+- OPENAI_API_KEY
+- ANTHROPIC_API_KEY
+- GOOGLE_GENAI_API_KEY
+- PERPLEXITY_API_KEY
+- XAI_API_KEY   # Grok (stub until xAI endpoint wired)
+(Optional) News feed:
+- NEWSAPI_KEY
+
+If a key is missing, that provider runs in MOCK mode and the pipeline still completes.
+
+### Verify providers
+```bash
+pip install -e .
+python providers_health.py
+# and visit /health/providers in the dashboard
+```
+# END stonecutter live: README keys
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.
