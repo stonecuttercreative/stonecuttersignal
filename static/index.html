@@ -522,7 +522,7 @@ const $input    = document.getElementById('input');
 const $sendBtn  = document.getElementById('send-btn');
 const $empty    = document.getElementById('empty');
 
-let ws, analyzing = false, lastAnalysis = null;
+let ws, analyzing = false, lastAnalysis = null, serverGreeted = false;
 
 /* ── WebSocket ── */
 function connect() {
@@ -567,6 +567,7 @@ function newConversation() {
   $messages.innerHTML = '';
   $empty.classList.remove('hidden');
   $chat.classList.remove('has-messages');
+  serverGreeted = false;
   unlock();
   ws.send(JSON.stringify({ type: 'new_conversation' }));
 }
@@ -595,6 +596,8 @@ function appendUser(text) {
 /* ── Render: AI text ── */
 function appendAI(content) {
   removeTyping();
+  // Skip the server's initial greeting — the hero already conveys it
+  if (!serverGreeted) { serverGreeted = true; return; }
   hideEmpty();
   const row = el('div', 'msg-row');
   row.innerHTML = `
