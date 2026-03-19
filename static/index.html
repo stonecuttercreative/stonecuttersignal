@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stonecutter Signal</title>
+  <style>
+    :root {
+      --bg:         #0B0B0B;
+      --surface:    #141414;
+      --surface-2:  #1C1C1C;
+      --border:     #262626;
+      --border-dim: #1E1E1E;
+      --text:       #EBEBEB;
+      --text-2:     #999;
+      --text-dim:   #555;
+      --accent:     #C8A96E;
+      --accent-bg:  rgba(200,169,110,.09);
+      --accent-bdr: rgba(200,169,110,.22);
+
+      --strong:     #4ADE80;
+      --strong-bg:  rgba(74,222,128,.07);
+      --caution:    #F5A623;
+      --caution-bg: rgba(245,166,35,.07);
+      --rework:     #F87171;
+      --rework-bg:  rgba(248,113,113,.07);
+      --weak:       #888;
+      --weak-bg:    rgba(136,136,136,.07);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 15px;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ─── Header ─── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      height: 54px;
+      border-bottom: 1px solid var(--border-dim);
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .wordmark {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--text);
+      user-select: none;
+    }
+
+    .wordmark-gem { color: var(--accent); font-size: 15px; line-height: 1; }
+
+    .new-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-2);
+      padding: 5px 14px;
+      border-radius: 7px;
+      font-size: 12px;
+      letter-spacing: .04em;
+      cursor: pointer;
+      transition: border-color .15s, color .15s;
+      font-family: inherit;
+    }
+    .new-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ─── Chat scroll area ─── */
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 48px 0 28px;
+      scroll-behavior: smooth;
+      position: relative;
+    }
+    #chat::-webkit-scrollbar { width: 3px; }
+    #chat::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ─── Empty state ─── */
+    #empty {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      pointer-events: none;
+      transition: opacity .3s;
+    }
+    #empty .empty-gem { font-size: 28px; color: var(--accent); opacity: .5; margin-bottom: 20px; }
+    #empty h2 { font-size: 13px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--text-2); margin-bottom: 10px; }
+    #empty p  { font-size: 14px; color: var(--text-dim); line-height: 1.7; max-width: 340px; }
+    #empty.hidden { opacity: 0; }
+
+    /* ─── Message rows ─── */
+    .msg-row {
+      max-width: 780px;
+      margin: 0 auto 28px;
+      padding: 0 28px;
+      animation: fadeUp .22s ease;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* User bubble */
+    .msg-row.user { display: flex; justify-content: flex-end; }
+    .user-bubble {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 16px 16px 4px 16px;
+      padding: 12px 18px;
+      max-width: 68%;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Assistant label */
+    .ai-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .ai-text { line-height: 1.72; color: var(--text); }
+    .ai-text strong { color: var(--text); font-weight: 600; }
+
+    /* Typing indicator */
+    .typing-dots {
+      display: inline-flex;
+      gap: 5px;
+      padding: 4px 0;
+    }
+    .typing-dots span {
+      width: 6px; height: 6px;
+      background: var(--text-dim);
+      border-radius: 50%;
+      animation: blink 1.2s infinite;
+    }
+    .typing-dots span:nth-child(2) { animation-delay: .2s; }
+    .typing-dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes blink {
+      0%,80%,100% { opacity: .15; transform: scale(.8); }
+      40%         { opacity: 1;   transform: scale(1); }
+    }
+
+    /* Progress card */
+    .progress-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+    }
+    .p-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 5px 0;
+      font-size: 13px;
+      color: var(--text-dim);
+      transition: color .3s;
+    }
+    .p-step.done   { color: var(--text-2); }
+    .p-step.active { color: var(--text); }
+    .p-dot {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px;
+      flex-shrink: 0;
+      color: var(--text-dim);
+      transition: all .3s;
+    }
+    .p-dot.done   { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+    .p-dot.active { border-color: var(--accent); color: var(--accent); animation: pulse 1.3s ease-in-out infinite; }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%     { opacity: .35; }
+    }
+
+    /* ─── Analysis card ─── */
+    .analysis-card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    /* Verdict strip */
+    .verdict-strip {
+      padding: 15px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .verdict-strip.strong { background: var(--strong-bg); }
+    .verdict-strip.caution { background: var(--caution-bg); }
+    .verdict-strip.rework  { background: var(--rework-bg); }
+    .verdict-strip.weak    { background: var(--weak-bg); }
+
+    .v-gem { font-size: 18px; }
+    .verdict-strip.strong  .v-gem, .verdict-strip.strong  .v-label { color: var(--strong); }
+    .verdict-strip.caution .v-gem, .verdict-strip.caution .v-label { color: var(--caution); }
+    .verdict-strip.rework  .v-gem, .verdict-strip.rework  .v-label { color: var(--rework); }
+    .verdict-strip.weak    .v-gem, .verdict-strip.weak    .v-label { color: var(--weak); }
+
+    .v-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    .v-confidence {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-2);
+      font-variant-numeric: tabular-nums;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* Section wrapper */
+    .card-section {
+      padding: 26px 26px 22px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-section:last-child { border-bottom: none; }
+    .section-head {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 18px;
+    }
+
+    /* Story */
+    .story-text {
+      font-size: 15px;
+      line-height: 1.82;
+      color: var(--text);
+    }
+    .story-text p + p { margin-top: 20px; }
+
+    /* Scores */
+    .score-row {
+      display: grid;
+      grid-template-columns: 170px 1fr 38px;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 13px;
+    }
+    .score-row:last-child { margin-bottom: 0; }
+    .s-label {
+      font-size: 11px;
+      color: var(--text-2);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .s-track {
+      height: 3px;
+      background: var(--surface-2);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .s-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: var(--accent);
+      width: 0;
+      transition: width .9s cubic-bezier(.16,1,.3,1);
+    }
+    .s-num {
+      font-size: 13px;
+      font-weight: 600;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--text);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .score-divider {
+      height: 1px;
+      background: var(--border-dim);
+      margin: 16px 0 15px;
+    }
+    .confidence-label { color: var(--text-dim); }
+
+    /* Analogues */
+    .analogue-item {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border-dim);
+    }
+    .analogue-item:last-child { padding-bottom: 0; border-bottom: none; }
+    .analogue-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 5px;
+      flex-wrap: wrap;
+    }
+    .analogue-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .analogue-year {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .outcome-badge {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+    .outcome-badge.success { background: var(--strong-bg);  color: var(--strong); }
+    .outcome-badge.failure { background: var(--rework-bg);  color: var(--rework); }
+    .outcome-badge.mixed   { background: var(--caution-bg); color: var(--caution); }
+    .analogue-lesson { font-size: 12px; color: var(--text-2); line-height: 1.55; }
+
+    /* Live signal */
+    .signal-pill-row { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 18px; }
+    .signal-pill {
+      background: var(--accent-bg);
+      border: 1px solid var(--accent-bdr);
+      border-radius: 20px;
+      padding: 3px 11px;
+      font-size: 11px;
+      color: var(--accent);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .signal-item {
+      padding: 0 0 14px 14px;
+      border-left: 2px solid var(--border);
+      margin-bottom: 4px;
+    }
+    .signal-item:last-child { margin-bottom: 0; }
+    .si-title {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .si-meta {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* Export button */
+    .export-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-2);
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-size: 12px;
+      letter-spacing: .04em;
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color .15s, color .15s;
+    }
+    .export-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ─── Input footer ─── */
+    footer {
+      border-top: 1px solid var(--border-dim);
+      padding: 16px 28px 22px;
+      flex-shrink: 0;
+      background: var(--bg);
+    }
+    .input-row {
+      max-width: 780px;
+      margin: 0 auto;
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+    #input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      padding: 12px 16px;
+      color: var(--text);
+      font-size: 15px;
+      font-family: inherit;
+      line-height: 1.55;
+      resize: none;
+      min-height: 48px;
+      max-height: 180px;
+      overflow-y: auto;
+      outline: none;
+      transition: border-color .15s;
+    }
+    #input:focus { border-color: var(--accent); }
+    #input::placeholder { color: var(--text-dim); }
+
+    .send-btn {
+      width: 44px; height: 44px;
+      border-radius: 11px;
+      background: var(--accent);
+      border: none;
+      color: var(--bg);
+      font-size: 19px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: opacity .15s;
+      font-family: inherit;
+    }
+    .send-btn:hover   { opacity: .85; }
+    .send-btn:disabled { opacity: .28; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="wordmark">
+    <span class="wordmark-gem">◈</span>
+    Stonecutter Signal
+  </div>
+  <button class="new-btn" onclick="newConversation()">New brief</button>
+</header>
+
+<div id="chat">
+  <div id="empty">
+    <div class="empty-gem">◈</div>
+    <h2>Stonecutter Signal</h2>
+    <p>Describe your campaign idea below. Rough is fine. I'll ask if I need anything else before running the analysis.</p>
+  </div>
+  <div id="messages"></div>
+</div>
+
+<footer>
+  <div class="input-row">
+    <textarea id="input" placeholder="Describe your campaign idea." rows="1"></textarea>
+    <button class="send-btn" id="send-btn" onclick="sendMessage()" title="Send (Enter)">→</button>
+  </div>
+</footer>
+
+<script>
+const $messages = document.getElementById('messages');
+const $chat     = document.getElementById('chat');
+const $input    = document.getElementById('input');
+const $sendBtn  = document.getElementById('send-btn');
+const $empty    = document.getElementById('empty');
+
+let ws, analyzing = false, lastAnalysis = null;
+
+/* ── WebSocket ── */
+function connect() {
+  const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${wsProto}//${location.host}/ws`);
+  ws.onmessage = e => dispatch(JSON.parse(e.data));
+  ws.onclose   = () => setTimeout(connect, 1800);
+}
+
+function dispatch(msg) {
+  switch (msg.type) {
+    case 'message':  appendAI(msg.content); break;
+    case 'typing':   showTyping(); break;
+    case 'progress': updateProgress(msg.steps); break;
+    case 'analysis':
+      removeProgress();
+      appendAnalysis(msg.data);
+      unlock();
+      break;
+    case 'error':
+      removeProgress();
+      appendAI(msg.content);
+      unlock();
+      break;
+  }
+  scrollBottom();
+}
+
+function sendMessage() {
+  const text = $input.value.trim();
+  if (!text || analyzing) return;
+  hideEmpty();
+  appendUser(text);
+  $input.value = '';
+  $input.style.height = 'auto';
+  lock();
+  ws.send(JSON.stringify({ type: 'message', content: text }));
+  scrollBottom();
+}
+
+function newConversation() {
+  $messages.innerHTML = '';
+  $empty.classList.remove('hidden');
+  unlock();
+  ws.send(JSON.stringify({ type: 'new_conversation' }));
+}
+
+function lock()   { analyzing = true;  $sendBtn.disabled = true;  $input.disabled = true; }
+function unlock() { analyzing = false; $sendBtn.disabled = false; $input.disabled = false; $input.focus(); }
+function hideEmpty() { $empty.classList.add('hidden'); }
+function scrollBottom() { $chat.scrollTop = $chat.scrollHeight; }
+
+/* ── Input auto-grow ── */
+$input.addEventListener('input', () => {
+  $input.style.height = 'auto';
+  $input.style.height = Math.min($input.scrollHeight, 180) + 'px';
+});
+$input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+/* ── Render: user ── */
+function appendUser(text) {
+  const row = el('div', 'msg-row user');
+  row.innerHTML = `<div class="user-bubble">${esc(text)}</div>`;
+  $messages.appendChild(row);
+}
+
+/* ── Render: AI text ── */
+function appendAI(content) {
+  removeTyping();
+  hideEmpty();
+  const row = el('div', 'msg-row');
+  row.innerHTML = `
+    <div class="ai-label">Stonecutter</div>
+    <div class="ai-text">${md(content)}</div>`;
+  $messages.appendChild(row);
+}
+
+/* ── Render: typing indicator ── */
+let typingEl = null;
+function showTyping() {
+  if (typingEl) return;
+  const row = el('div', 'msg-row');
+  row.id = 'typing-row';
+  row.innerHTML = `
+    <div class="ai-label">Stonecutter</div>
+    <div class="typing-dots"><span></span><span></span><span></span></div>`;
+  $messages.appendChild(row);
+  typingEl = row;
+  scrollBottom();
+}
+function removeTyping() {
+  if (typingEl) { typingEl.remove(); typingEl = null; }
+}
+
+/* ── Render: progress ── */
+let progressRow = null;
+function updateProgress(steps) {
+  removeTyping();
+  if (!progressRow) {
+    progressRow = el('div', 'msg-row');
+    progressRow.id = 'progress-row';
+    progressRow.innerHTML = `
+      <div class="ai-label">Stonecutter</div>
+      <div class="progress-card" id="progress-card"></div>`;
+    $messages.appendChild(progressRow);
+  }
+  document.getElementById('progress-card').innerHTML = steps.map(s => `
+    <div class="p-step ${s.done ? 'done' : s.active ? 'active' : ''}">
+      <div class="p-dot ${s.done ? 'done' : s.active ? 'active' : ''}">
+        ${s.done ? '✓' : s.active ? '●' : '○'}
+      </div>
+      <span>${esc(s.label)}</span>
+    </div>`).join('');
+  scrollBottom();
+}
+function removeProgress() {
+  if (progressRow) { progressRow.remove(); progressRow = null; }
+}
+
+/* ── Render: analysis card ── */
+function appendAnalysis(d) {
+  lastAnalysis = d;
+  const verdict     = (d.verdict || 'PROCEED WITH CAUTION').trim().toUpperCase();
+  const vClass      = verdictClass(verdict);
+  const vIcon       = '◈';
+  const confidence  = d.confidence ?? 0;
+  const scores      = d.scores || {};
+  const scoreKeys   = [
+    ['cultural_fit',       'Cultural Fit'],
+    ['authenticity',       'Authenticity'],
+    ['emotional_resonance','Emotional Resonance'],
+    ['differentiation',    'Differentiation'],
+    ['conversation_fit',   'Conversation Fit'],
+  ];
+
+  /* Score rows */
+  const scoreRowsHtml = scoreKeys.map(([k, label]) => {
+    const v = scores[k] ?? 0;
+    return `
+    <div class="score-row">
+      <div class="s-label">${label}</div>
+      <div class="s-track"><div class="s-fill" data-v="${v}"></div></div>
+      <div class="s-num">${v}</div>
+    </div>`;
+  }).join('');
+
+  /* Story paragraphs */
+  const story = (d.story || '').split(/\n\n+/).filter(p => p.trim())
+    .map(p => `<p>${esc(p.trim())}</p>`).join('');
+
+  /* Analogues — rich cards from KB match data */
+  const analogues = (d.analogues || []);
+  const analoguesHtml = analogues.length
+    ? analogues.map(a => {
+        const oc = (a.outcome || '').toLowerCase();
+        const badge = oc === 'success' ? 'SUCCESS' : oc === 'failure' ? 'FAILURE' : 'MIXED';
+        return `
+        <div class="analogue-item">
+          <div class="analogue-header">
+            <span class="analogue-name">${esc(a.brand)} &mdash; &ldquo;${esc(a.campaign)}&rdquo;</span>
+            <span class="analogue-year">${esc(String(a.year || ''))}</span>
+            <span class="outcome-badge ${oc}">${badge}</span>
+          </div>
+          <div class="analogue-lesson">${esc(a.lesson_one_line || '')}</div>
+        </div>`;
+      }).join('')
+    : `<p style="font-size:13px;color:var(--text-dim)">None matched.</p>`;
+
+  /* Live signal — Reddit only, top 5 */
+  const redditItems = (d.evidence || []).filter(e => e.provider === 'reddit').slice(0, 5);
+  const sources = [...new Set(redditItems.map(e => (e.source||'').split(' ')[0]).filter(Boolean))];
+  const sourcePills = sources.map(s => `<span class="signal-pill">${esc(s)}</span>`).join('');
+  const signalItems = redditItems.map(e => `
+    <div class="signal-item">
+      <div class="si-title">"${esc((e.title||'').slice(0,110))}"</div>
+      <div class="si-meta">${esc(e.source||'')}</div>
+    </div>`).join('');
+
+  /* Assemble card */
+  const row = el('div', 'msg-row');
+  row.innerHTML = `
+    <div class="ai-label">Stonecutter</div>
+    <div class="analysis-card">
+
+      <div class="verdict-strip ${vClass}">
+        <span class="v-gem">${vIcon}</span>
+        <span class="v-label">${esc(verdict)}</span>
+        <span class="v-confidence">Confidence ${confidence}</span>
+      </div>
+
+      <div class="card-section">
+        <div class="story-text">${story}</div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-head">Historical Analogues</div>
+        ${analoguesHtml}
+      </div>
+
+      <div class="card-section">
+        <div class="section-head">Scores</div>
+        ${scoreRowsHtml}
+        <div class="score-divider"></div>
+        <div class="score-row">
+          <div class="s-label confidence-label">Confidence</div>
+          <div class="s-track"><div class="s-fill" data-v="${confidence}" style="background:var(--text-dim)"></div></div>
+          <div class="s-num" style="color:var(--text-2)">${confidence}</div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-head">Live Signal — searched today</div>
+        ${sourcePills ? `<div class="signal-pill-row">${sourcePills}</div>` : ''}
+        ${signalItems || `<p style="font-size:13px;color:var(--text-dim)">No targeted community signal found.</p>`}
+      </div>
+
+      <div class="card-section" style="padding:16px 26px;border-top:1px solid var(--border);">
+        <button class="export-btn" onclick="exportPDF()">↓ Export Report</button>
+      </div>
+
+    </div>`;
+  $messages.appendChild(row);
+
+  /* Animate score bars after a tick */
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    row.querySelectorAll('.s-fill').forEach(bar => {
+      bar.style.width = (bar.dataset.v || 0) + '%';
+    });
+  }));
+}
+
+/* ── Helpers ── */
+function verdictClass(v) {
+  if (v.includes('STRONG'))  return 'strong';
+  if (v.includes('REWORK'))  return 'rework';
+  if (v.includes('WEAK'))    return 'weak';
+  return 'caution';
+}
+function el(tag, cls) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  return e;
+}
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function md(s) {
+  return esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+/* ── PDF Export ── */
+function exportPDF() {
+  if (!lastAnalysis) return;
+  const w = window.open('', '_blank');
+  w.document.write(buildPrintHTML(lastAnalysis));
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 500);
+}
+
+function buildPrintHTML(d) {
+  const brand      = d.brand || 'Unknown';
+  const category   = d.category || '';
+  const verdict    = (d.verdict || 'PROCEED WITH CAUTION').trim().toUpperCase();
+  const confidence = d.confidence ?? 0;
+  const scores     = d.scores || {};
+  const analogues  = d.analogues || [];
+  const evidence   = (d.evidence || []).filter(e => e.provider === 'reddit').slice(0, 6);
+  const date       = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const vColor = verdict.includes('STRONG') ? '#15803d' : verdict.includes('REWORK') ? '#b91c1c' : verdict.includes('WEAK') ? '#6b7280' : '#b45309';
+  const vBg    = verdict.includes('STRONG') ? '#f0fdf4' : verdict.includes('REWORK') ? '#fef2f2' : verdict.includes('WEAK') ? '#f9fafb' : '#fffbeb';
+
+  const scoreKeys = [
+    ['cultural_fit',        'Cultural Fit'],
+    ['authenticity',        'Authenticity'],
+    ['emotional_resonance', 'Emotional Resonance'],
+    ['differentiation',     'Differentiation'],
+    ['conversation_fit',    'Conversation Fit'],
+  ];
+
+  const scoreRows = scoreKeys.map(([k, label]) => {
+    const v = scores[k] ?? 0;
+    return `<tr>
+      <td class="sl">${label}</td>
+      <td class="sb"><div class="sbg"><div class="sbf" style="width:${v}%"></div></div></td>
+      <td class="sn">${v}</td>
+    </tr>`;
+  }).join('');
+
+  const storyHtml = (d.story || '').split(/\n\n+/).filter(p => p.trim())
+    .map(p => `<p>${esc(p.trim())}</p>`).join('');
+
+  const analoguesHtml = analogues.length
+    ? analogues.map(a => {
+        const oc = (a.outcome || '').toLowerCase();
+        const bc = oc === 'success' ? '#15803d' : oc === 'failure' ? '#b91c1c' : '#b45309';
+        const bb = oc === 'success' ? '#f0fdf4' : oc === 'failure' ? '#fef2f2' : '#fffbeb';
+        const bl = oc === 'success' ? 'SUCCESS' : oc === 'failure' ? 'FAILURE' : 'MIXED';
+        return `<div class="ar">
+          <div class="arh">
+            <span class="an">${esc(a.brand)} &mdash; &ldquo;${esc(a.campaign)}&rdquo;</span>
+            <span class="ay">${a.year || ''}</span>
+            <span class="ab" style="color:${bc};background:${bb}">${bl}</span>
+          </div>
+          <div class="al">${esc(a.lesson_one_line || '')}</div>
+        </div>`;
+      }).join('')
+    : '<p class="dim">None matched.</p>';
+
+  const signalHtml = evidence.length
+    ? evidence.map(e => `<div class="sr">
+        <div class="st">&ldquo;${esc((e.title || '').slice(0, 120))}&rdquo;</div>
+        <div class="sm">${esc(e.source || '')}</div>
+      </div>`).join('')
+    : '<p class="dim">No targeted community signal found.</p>';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Stonecutter Signal &mdash; ${esc(brand)}</title>
+<style>
+@page { size: A4; margin: 2cm 2.3cm; }
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:11pt;color:#111;background:#fff;line-height:1.65}
+.hdr{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:13px;border-bottom:2px solid #111;margin-bottom:22px}
+.wm{font-size:10pt;font-weight:700;letter-spacing:.13em;text-transform:uppercase}
+.wm span{color:#c8a96e}
+.meta{font-size:9pt;color:#555;text-align:right}
+.meta strong{color:#111;display:block;font-size:11pt;margin-bottom:2px}
+.vbox{display:flex;align-items:center;gap:14px;padding:13px 18px;border-radius:6px;margin-bottom:26px;background:${vBg};border-left:4px solid ${vColor}}
+.vl{font-size:12pt;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:${vColor}}
+.vc{margin-left:auto;font-size:10pt;color:#555;font-variant-numeric:tabular-nums}
+.sec{margin-bottom:26px;page-break-inside:avoid}
+.sh{font-size:7.5pt;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#999;margin-bottom:11px;padding-bottom:6px;border-bottom:1px solid #e8e8e8}
+.story p{margin-bottom:13px;font-size:11pt;line-height:1.78}
+.story p:last-child{margin-bottom:0}
+.st-tbl{width:100%;border-collapse:collapse}
+.sl{font-size:10pt;color:#444;width:158px;padding:5px 0;white-space:nowrap}
+.sb{padding:5px 12px 5px 0}
+.sbg{height:4px;background:#e8e8e8;border-radius:2px}
+.sbf{height:100%;background:#c8a96e;border-radius:2px}
+.sn{font-size:10pt;font-weight:600;text-align:right;width:34px;color:#111;font-variant-numeric:tabular-nums}
+.sdiv td{padding-top:10px;border-top:1px solid #e8e8e8}
+.cl{font-size:10pt;color:#999}
+.cn{font-size:10pt;color:#999;font-weight:600}
+.cf{background:#ccc}
+.ar{padding:12px 0;border-bottom:1px solid #f0f0f0}
+.ar:last-child{border-bottom:none}
+.arh{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.an{font-size:10.5pt;font-weight:600}
+.ay{font-size:9pt;color:#999}
+.ab{font-size:7.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:1px 7px;border-radius:8px;margin-left:auto;white-space:nowrap}
+.al{font-size:10pt;color:#555;line-height:1.5}
+.sr{padding:10px 0;border-bottom:1px solid #f0f0f0}
+.sr:last-child{border-bottom:none}
+.st{font-size:10.5pt;color:#111;margin-bottom:3px}
+.sm{font-size:9pt;color:#999;font-family:monospace}
+.ftr{margin-top:32px;padding-top:11px;border-top:1px solid #e8e8e8;font-size:8.5pt;color:#bbb;display:flex;justify-content:space-between}
+.dim{font-size:10pt;color:#aaa}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="wm"><span>&#9672;</span> Stonecutter Signal</div>
+  <div class="meta"><strong>${esc(brand)}${category ? ' &mdash; ' + esc(category) : ''}</strong>${date}</div>
+</div>
+<div class="vbox">
+  <span class="vl">${esc(verdict)}</span>
+  <span class="vc">Confidence ${confidence}</span>
+</div>
+<div class="sec">
+  <div class="sh">Signal Story</div>
+  <div class="story">${storyHtml}</div>
+</div>
+<div class="sec">
+  <div class="sh">Historical Analogues</div>
+  ${analoguesHtml}
+</div>
+<div class="sec">
+  <div class="sh">Scores</div>
+  <table class="st-tbl"><tbody>
+    ${scoreRows}
+    <tr class="sdiv">
+      <td class="cl">Confidence</td>
+      <td class="sb"><div class="sbg"><div class="sbf cf" style="width:${confidence}%"></div></div></td>
+      <td class="cn">${confidence}</td>
+    </tr>
+  </tbody></table>
+</div>
+<div class="sec">
+  <div class="sh">Live Signal &mdash; Reddit</div>
+  ${signalHtml}
+</div>
+<div class="ftr">
+  <span>Generated by Stonecutter Signal</span>
+  <span>${date}</span>
+</div>
+</body>
+</html>`;
+}
+
+connect();
+</script>
+</body>
+</html>
