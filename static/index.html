@@ -534,7 +534,7 @@ function connect() {
 
 function dispatch(msg) {
   switch (msg.type) {
-    case 'message':  appendAI(msg.content); break;
+    case 'message':  appendAI(msg.content); unlock(); break;
     case 'typing':   showTyping(); break;
     case 'progress': updateProgress(msg.steps); break;
     case 'analysis':
