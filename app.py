@@ -33,26 +33,36 @@ async def index():
 
 # ── Brief extraction (fast haiku call) ───────────────────────────────────────
 _EXTRACT_SYS = """\
-You extract campaign briefs from natural conversation. Reply with ONLY valid JSON — no prose, no markdown.
+You are a creative strategist gathering a campaign brief. Reply with ONLY valid JSON — no prose, no markdown.
 
-If you have a clear enough concept to run an analysis (even rough), respond:
+A brief is READY when you have real, specific values (not "Unknown") for ALL THREE:
+  • brand    — the company or product name
+  • concept  — a specific campaign idea, not just a vague goal (e.g. "Serena Williams front a women's empowerment film" not just "empowerment campaign")
+  • audience — who this is actually for, with some specificity (e.g. "Gen Z women 18-24" not just "everyone")
+
+Category and channels can always be inferred — never ask about them.
+
+When all three are clear, respond:
 {"ready": true, "brief": {"brand": "...", "category": "...", "concept": "...", "audience": "...", "channels": "..."}}
 
-Rules:
-- "brand" defaults to "Unknown" if not mentioned
-- "category": infer from context (financial services, crypto, sportswear, food & beverage, automotive, technology, retail, health & wellness, beer & alcohol, etc.)
-- "concept" must be non-empty — it is the core campaign idea
-- "audience" and "channels" default to "Unknown" if absent
-- Proceed with what you have after ONE clarifying question at most
+When something critical is missing, ask exactly ONE short, conversational question — pick the highest-priority gap:
+  1. concept unclear or too vague  → ask what the core campaign idea or message is
+  2. brand not mentioned            → ask what brand or company this is for
+  3. audience vague or missing      → ask who the specific target audience is
 
-If the concept is completely unclear, ask exactly ONE short specific question:
 {"ready": false, "question": "..."}
+
+Never ask about category or channels. Never ask two questions at once.
 """
 
 _EXTRACT_MODELS = ["claude-haiku-4-5-20251001", "claude-3-5-sonnet-20241022"]
 
 
 async def extract_brief(history: list[dict]) -> dict:
+    user_turns = sum(1 for m in history if m["role"] == "user")
+    # After 3 exchanges, force the analysis with whatever we have
+    force = "\n\nThe user has now replied 3+ times. You MUST return ready:true now — fill any remaining gaps with your best inference." if user_turns >= 3 else ""
+
     hist_text = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in history)
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
@@ -60,9 +70,9 @@ async def extract_brief(history: list[dict]) -> dict:
         try:
             resp = client.messages.create(
                 model=model,
-                max_tokens=220,
+                max_tokens=280,
                 temperature=0,
-                system=_EXTRACT_SYS,
+                system=_EXTRACT_SYS + force,
                 messages=[{"role": "user", "content": hist_text}],
             )
             raw = resp.content[0].text.strip()
