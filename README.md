@@ -181,6 +181,19 @@ Perplexity is now configured to try SONAR models:
 If your account exposes a different set, update `perplexity_fallbacks` in `settings.py` accordingly.
 # END patch: perplexity-sonar-fallbacks
 
+# BEGIN patch: list-perplexity-models
+### Discover your Perplexity models
+List the exact model IDs your key can use:
+```bash
+python scripts/list_perplexity_models.py
+```
+Copy the printed JSON list into `perplexity_fallbacks` in `src/stonecutter/settings.py`, then:
+```bash
+pip install -e .
+python scripts/diag_all.py
+```
+# END patch: list-perplexity-models
+
 ## Architecture
 
 The system uses a hybrid approach combining multiple LLM providers with deterministic orchestration logic for robust campaign analysis.
