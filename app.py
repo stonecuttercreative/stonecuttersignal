@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import anthropic
 import uvicorn
 
@@ -20,6 +21,9 @@ from stonecutter.settings import settings
 # ── App ──────────────────────────────────────────────────────────────────────
 app = FastAPI()
 _HTML_PATH = ROOT / "static" / "index.html"
+_STATIC_DIR = ROOT / "static"
+if _STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
 @app.get("/")

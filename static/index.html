@@ -146,17 +146,16 @@
     }
     #chat.has-messages::before { opacity: 0; }
 
-    /* ─── Blob image (drop signal-blob.png into /static/ to enable) ─── */
+    /* ─── Blob image ─── */
     #blob-bg {
       position: absolute;
-      top: 50%;
-      right: -60px;
-      transform: translateY(-55%);
-      width: min(460px, 55vw);
+      top: -60px;
+      right: -40px;
+      width: min(480px, 56vw);
       aspect-ratio: 1;
       pointer-events: none;
       background: url('/static/signal-blob.png') center/contain no-repeat;
-      opacity: .22;
+      opacity: .28;
       transition: opacity .5s;
       mix-blend-mode: screen;
     }
@@ -494,7 +493,6 @@
 
 <header>
   <div class="wordmark">
-    <span class="wordmark-gem">◈</span>
     Stonecutter Signal
   </div>
   <button class="new-btn" onclick="newConversation()">New brief</button>
